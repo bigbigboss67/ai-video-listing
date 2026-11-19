@@ -1,0 +1,28 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# Next.js
+/.next/
+/out/
+
+# Local runtime store & uploaded videos
+/.data/
+/.vercel/
+
+# Testing
+/coverage
+/playwright-report
+/test-results
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# OS & logs
+.DS_Store
+*.log
+npm-debug.log*
+next-env.d.ts
