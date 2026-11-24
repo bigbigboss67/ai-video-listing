@@ -8,10 +8,16 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get('webhook-signature');
 
-  if (
-    process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET &&
-    !verifyCloudflareWebhookSignature(rawBody, signature)
-  ) {
+  const webhookSecret = (process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET || '').trim();
+  if (!webhookSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      return apiError(
+        503,
+        'WEBHOOK_NOT_CONFIGURED',
+        'Cloudflare Stream webhook secret is not configured.'
+      );
+    }
+  } else if (!verifyCloudflareWebhookSignature(rawBody, signature)) {
     return apiError(401, 'INVALID_SIGNATURE', 'Webhook signature verification failed.');
   }
 

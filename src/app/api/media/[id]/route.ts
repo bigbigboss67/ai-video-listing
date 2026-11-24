@@ -33,8 +33,9 @@ export async function GET(
     const match = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
     if (match) {
       const start = Math.min(Number(match[1]), Math.max(0, fileSize - 1));
+      const maxEnd = Math.min(start + 2 * 1024 * 1024 - 1, fileSize - 1);
       const end = match[2]
-        ? Math.min(Number(match[2]), fileSize - 1)
+        ? Math.min(Number(match[2]), maxEnd)
         : Math.min(start + 1024 * 1024 - 1, fileSize - 1);
       const chunkSize = Math.max(0, end - start + 1);
       const buffer = Buffer.alloc(chunkSize);
@@ -52,7 +53,9 @@ export async function GET(
           'Accept-Ranges': 'bytes',
           'Content-Length': String(chunkSize),
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=300',
+          'Content-Disposition': 'inline',
+          'X-Robots-Tag': 'noindex, noai, noimageai',
+          'Cache-Control': 'private, max-age=300',
         },
       });
     }

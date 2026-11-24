@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canCreateProperty, getCurrentSessionUser } from '@/lib/auth';
+import { canCreateProperty, canViewDashboard, getCurrentSessionUser } from '@/lib/auth';
 import { apiError, checkRateLimit, zodApiError } from '@/lib/api-error';
 import { createProperty, listProperties } from '@/lib/store';
 import { createPropertySchema } from '@/lib/validation';
@@ -20,9 +20,14 @@ export async function GET(request: Request) {
     ? Number(searchParams.get('minBeds'))
     : undefined;
   const verifiedOnly = searchParams.get('verifiedOnly') === 'true';
-  const includeUnpublished = searchParams.get('includeUnpublished') === 'true';
+  const requestedUnpublished = searchParams.get('includeUnpublished') === 'true';
+  const sessionUser = requestedUnpublished ? await getCurrentSessionUser() : null;
+  const includeUnpublished = Boolean(
+    requestedUnpublished && sessionUser && canViewDashboard(sessionUser.role)
+  );
   const cursor = searchParams.get('cursor') ?? undefined;
-  const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : 24;
+  const rawLimit = searchParams.get('limit') ? Number(searchParams.get('limit')) : 24;
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, Math.floor(rawLimit)), 48) : 24;
 
   const north = searchParams.get('north');
   const south = searchParams.get('south');

@@ -54,6 +54,9 @@ export async function PATCH(
   const expectedOffset = Number(offsetHeader);
 
   const arrayBuffer = await request.arrayBuffer();
+  if (arrayBuffer.byteLength > 5 * 1024 * 1024) {
+    return apiError(413, 'CHUNK_TOO_LARGE', 'Upload chunk exceeds maximum 5 MB limit.');
+  }
   const chunk = Buffer.from(arrayBuffer);
 
   const result = appendTusChunk(id, expectedOffset, chunk);
