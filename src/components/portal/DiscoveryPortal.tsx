@@ -28,6 +28,7 @@ import { useAppContext } from '@/components/providers/AppProvider';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { buildWhatsAppUrl, formatArea, formatCurrency } from '@/lib/format';
 import { ListingVideoCard } from './ListingVideoCard';
+import { CoverflowReelShowcase } from './CoverflowReelShowcase';
 import { AdaptiveVideoPlayer } from '@/components/video/AdaptiveVideoPlayer';
 import { ClusteredPropertyMap } from '@/components/map/ClusteredPropertyMap';
 import {
@@ -403,6 +404,13 @@ export function DiscoveryPortal({
           </button>
         </div>
       ) : null}
+
+      {/* Style B: 3D Glass Card Coverflow Showcase */}
+      <CoverflowReelShowcase
+        properties={properties}
+        locale={locale}
+        onSelectProperty={(p) => setSelectedProperty(p)}
+      />
 
       {/* Top Toolbar: Result Count + View Mode Toggle + Mobile Filter Trigger */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
