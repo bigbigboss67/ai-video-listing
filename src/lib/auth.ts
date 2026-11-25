@@ -139,3 +139,8 @@ export function canViewAuditLogs(role: UserRole): boolean {
 export function canManageUsers(role: UserRole): boolean {
   return role === 'admin';
 }
+
+/** Approving a DLD permit link turns on the public "verified" badge, so only Admins may do it. */
+export function canReviewPermits(role: UserRole): boolean {
+  return role === 'admin';
+}

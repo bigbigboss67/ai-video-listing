@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from './password';
+import { DLD_LINK_ERROR_MESSAGES, parseDldPermitLink } from './dld-permit';
 
 export const ALLOWED_VIDEO_MIMES = [
   'video/mp4',
@@ -11,6 +12,36 @@ export const MAX_VIDEO_SIZE_BYTES = 250 * 1024 * 1024; // 250 MB
 export const MAX_VIDEO_DURATION_SEC = 180; // 3 minutes
 
 export const TRAKHEESI_REGEX = /^[A-Z0-9-]{6,24}$/i;
+
+/** A link read from the agent's DLD Madmoun QR: https on the DLD Trakheesi host only. */
+export const dldPermitLinkSchema = z
+  .string()
+  .trim()
+  .superRefine((value, ctx) => {
+    const result = parseDldPermitLink(value);
+    if (!result.ok) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: DLD_LINK_ERROR_MESSAGES[result.code] });
+    }
+  });
+
+export const submitPermitLinkSchema = z.object({
+  madmounQrUrl: dldPermitLinkSchema,
+});
+
+export const permitReviewSchema = z
+  .object({
+    action: z.enum(['approve', 'reject']),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.action === 'reject' && (!data.reason || data.reason.length < 3)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'Give the agent a reason so they can fix the link.',
+      });
+    }
+  });
 
 export const createPropertySchema = z
   .object({
@@ -39,6 +70,8 @@ export const createPropertySchema = z
       .string()
       .trim()
       .regex(TRAKHEESI_REGEX, 'Valid Trakheesi permit number (6–24 alphanumeric chars) is required'),
+    // Optional at creation: the agent can add it later from the dashboard before the badge shows.
+    madmounQrUrl: z.union([z.literal(''), dldPermitLinkSchema]).optional(),
     developerName: z.string().trim().max(120).optional(),
     projectNumber: z.string().trim().max(60).optional(),
     escrowAccount: z.string().trim().max(60).optional(),

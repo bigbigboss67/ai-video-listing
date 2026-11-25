@@ -39,6 +39,7 @@ import {
 } from '@/lib/resumable-upload';
 import { PinAdjustMap } from '@/components/map/PinAdjustMap';
 import { ShotTeleprompter } from '@/components/capture/ShotTeleprompter';
+import { DldQrLinkField } from '@/components/permits/DldQrLinkField';
 import { Button, StatusPill, UploadProgressRing } from '@/components/ui/Primitives';
 import { formatDuration } from '@/lib/format';
 
@@ -121,6 +122,9 @@ export function CaptureStudio({
     'Verified architectural walkthrough captured on-site with natural lighting and full layout coverage.'
   );
   const [creatingProperty, setCreatingProperty] = useState(false);
+
+  // Link from the agent's DLD Madmoun QR (optional here; can be added later in the dashboard)
+  const [qcDldLink, setQcDldLink] = useState('');
 
   // Compliance & Upload runner state
   const [consentChecked, setConsentChecked] = useState(false);
@@ -337,6 +341,7 @@ export function CaptureStudio({
           ownership: qcOwnership,
           availability: qcAvailability,
           permitNumber: qcPermit,
+          madmounQrUrl: qcDldLink.trim() || undefined,
           developerName: qcDeveloper || undefined,
           projectNumber: qcProjectNumber || undefined,
           escrowAccount: qcEscrow || undefined,
@@ -363,6 +368,7 @@ export function CaptureStudio({
       setQuickCreateOpen(false);
       setQcTitleEn('');
       setQcTitleAr('');
+      setQcDldLink('');
     } finally {
       setCreatingProperty(false);
     }
@@ -1090,6 +1096,8 @@ export function CaptureStudio({
                     className="w-full h-9 px-2.5 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-xs font-mono-code bidi-ltr"
                   />
                 </div>
+
+                <DldQrLinkField value={qcDldLink} onChange={setQcDldLink} />
 
                 {qcStatus === 'off_plan' ? (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2.5 rounded-[6px] bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">

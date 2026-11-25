@@ -12,6 +12,7 @@ import {
   Lock,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
   Users,
   XCircle,
@@ -22,8 +23,9 @@ import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { formatDate, formatDuration } from '@/lib/format';
 import { Button, EmptyState, StatusPill } from '@/components/ui/Primitives';
 import { UserManagementPanel } from './UserManagementPanel';
+import { PermitReviewPanel } from './PermitReviewPanel';
 
-type DashboardTab = 'inventory' | 'moderation' | 'analytics' | 'audit' | 'team';
+type DashboardTab = 'inventory' | 'moderation' | 'permits' | 'analytics' | 'audit' | 'team';
 
 interface DashboardVideoRow extends PropertyVideo {
   propertyTitleEn: string;
@@ -234,6 +236,7 @@ export function DashboardView() {
             label: `${t('dashboard.tabModeration')} (${pendingVideos.length})`,
             icon: FileCheck2,
           },
+          { id: 'permits', label: t('permit.tab'), icon: ShieldCheck },
           { id: 'analytics', label: t('dashboard.tabAnalytics'), icon: BarChart3 },
           { id: 'audit', label: t('dashboard.tabAudit'), icon: ShieldAlert },
           ...(data?.permissions.canManageUsers
@@ -485,6 +488,8 @@ export function DashboardView() {
             </table>
           </div>
         </div>
+      ) : tab === 'permits' ? (
+        user ? <PermitReviewPanel currentUserId={user.id} /> : null
       ) : tab === 'team' ? (
         data.permissions.canManageUsers && user ? (
           <UserManagementPanel currentUserId={user.id} />

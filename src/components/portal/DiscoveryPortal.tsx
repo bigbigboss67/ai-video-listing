@@ -651,6 +651,7 @@ export function DiscoveryPortal({
               <MadmounQrCard
                 permitNumber={activeProperty.permitNumber}
                 verifyUrl={activeProperty.madmounQrUrl}
+                verified={activeProperty.isVerified}
                 label={t('listing.madmounQr')}
                 helperText={t('listing.verifyDld')}
                 compact

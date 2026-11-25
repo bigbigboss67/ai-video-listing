@@ -10,6 +10,7 @@ import {
   makeArchitecturalPoster,
 } from './seed-data';
 import { slugify, toAed } from './format';
+import { parseDldPermitLink } from './dld-permit';
 import { realtimeBroker } from './realtime-broker';
 import { DEFAULT_DEMO_PASSWORD, DEMO_PROFILES } from './demo-accounts';
 import { hashPassword } from './password';
@@ -17,6 +18,7 @@ import type {
   AuditLog,
   Enquiry,
   ModerationStatus,
+  PermitStatus,
   PaginatedResponse,
   Property,
   PropertyStatus,
@@ -128,6 +130,24 @@ function seedUsers(db: LocalDatabase): boolean {
   return changed;
 }
 
+/**
+ * Stores created before permit review existed carry a portal-generated QR link (which 404s)
+ * and a "verified" flag set from the permit number alone. Drop the fake link and the badge;
+ * a real DLD link already on file is kept but goes back to review.
+ */
+function upgradeLegacyPermitFields(db: LocalDatabase): boolean {
+  let changed = false;
+  for (const prop of db.properties) {
+    if (prop.permitStatus) continue;
+    const link = parseDldPermitLink(prop.madmounQrUrl);
+    prop.madmounQrUrl = link.ok ? link.url : '';
+    prop.permitStatus = link.ok ? 'pending' : 'not_submitted';
+    prop.isVerified = false;
+    changed = true;
+  }
+  return changed;
+}
+
 function createInitialDb(): LocalDatabase {
   const db: LocalDatabase = {
     users: [],
@@ -155,7 +175,9 @@ function loadDb(): LocalDatabase {
       if (Array.isArray(parsed.properties) && Array.isArray(parsed.videos)) {
         // Backward-compatible upgrade of stores created before user accounts existed
         if (!Array.isArray(parsed.users)) parsed.users = [];
-        if (seedUsers(parsed)) persistDb(parsed);
+        const usersAdded = seedUsers(parsed);
+        const permitsUpgraded = upgradeLegacyPermitFields(parsed);
+        if (usersAdded || permitsUpgraded) persistDb(parsed);
         globalForDb.__makanreelDb = parsed;
         return parsed;
       }
@@ -342,6 +364,8 @@ export function createProperty(
     : baseSlug;
   const now = new Date().toISOString();
   const priceAed = toAed(input.price, input.currency);
+  const parsedPermitLink = parseDldPermitLink(input.madmounQrUrl);
+  const initialPermitLink = parsedPermitLink.ok ? parsedPermitLink.url : '';
 
   const prop: Property = {
     id,
@@ -367,7 +391,8 @@ export function createProperty(
     ownership: input.ownership,
     availability: input.availability,
     permitNumber: input.permitNumber,
-    madmounQrUrl: `https://dubailand.gov.ae/en/eservices/trakheesi-verification?permit=${encodeURIComponent(input.permitNumber)}`,
+    // Only the link from the agent's own DLD QR; the portal never builds one from the permit number.
+    madmounQrUrl: initialPermitLink,
     developerName: input.developerName,
     projectNumber: input.projectNumber,
     escrowAccount: input.escrowAccount,
@@ -379,7 +404,10 @@ export function createProperty(
     community: input.community,
     lat: input.lat,
     lng: input.lng,
-    isVerified: Boolean(input.permitNumber),
+    // Verified only after an admin approves the DLD permit link.
+    isVerified: false,
+    permitStatus: initialPermitLink ? 'pending' : 'not_submitted',
+    ...(initialPermitLink ? { permitReview: { submittedAt: now, submittedById: actor.id } } : {}),
     galleryUrls: [makeArchitecturalPoster(input.titleEn, input.community)],
     units: [
       {
@@ -421,6 +449,170 @@ export function createProperty(
   });
 
   return hydrated;
+}
+
+// ---------------------------------------------------------------------------
+// DLD permit link review
+// ---------------------------------------------------------------------------
+
+export type PermitReviewAction = 'approve' | 'reject';
+
+export class PermitReviewError extends Error {
+  constructor(
+    public readonly code: 'NO_PERMIT_LINK' | 'INVALID_PERMIT_LINK',
+    message: string
+  ) {
+    super(message);
+    this.name = 'PermitReviewError';
+  }
+}
+
+function publishPropertyUpdated(db: LocalDatabase, prop: Property, now: string): PropertyWithVideos {
+  // No property payload: the SSE stream is public and the hydrated record includes unpublished videos.
+  // Listeners (e.g. the dashboard) refetch through their own authorised endpoints.
+  realtimeBroker.publish({
+    id: crypto.randomUUID(),
+    type: 'property.updated',
+    timestamp: now,
+    propertyId: prop.id,
+  });
+  return hydrateProperty(db, prop);
+}
+
+/**
+ * Store the link from the agent's DLD Madmoun QR and send it to admin review.
+ * Any change of link removes the verified badge until an admin approves the new one.
+ * Authorization (owner or admin) is enforced by the API route.
+ */
+export function submitPermitLink(
+  propertyId: string,
+  rawLink: string,
+  actor: SessionUser
+): PropertyWithVideos | null {
+  const parsed = parseDldPermitLink(rawLink);
+  if (!parsed.ok) throw new PermitReviewError('INVALID_PERMIT_LINK', `Invalid DLD link (${parsed.code}).`);
+  const db = loadDb();
+  const prop = db.properties.find((p) => p.id === propertyId);
+  if (!prop) return null;
+
+  const now = new Date().toISOString();
+  const previousStatus = prop.permitStatus;
+  prop.madmounQrUrl = parsed.url;
+  prop.permitStatus = 'pending';
+  prop.isVerified = false;
+  prop.permitReview = { submittedAt: now, submittedById: actor.id };
+  prop.updatedAt = now;
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: 'permit.submitted',
+    entityType: 'property',
+    entityId: prop.id,
+    metadata: {
+      permitNumber: prop.permitNumber,
+      previousStatus,
+      looksLikeMadmoun: parsed.looksLikeMadmoun,
+    },
+  });
+  return publishPropertyUpdated(db, prop, now);
+}
+
+/** Admin decision on a submitted DLD permit link. Approval is what turns the verified badge on. */
+export function reviewPermit(
+  propertyId: string,
+  action: PermitReviewAction,
+  actor: SessionUser,
+  reason?: string
+): PropertyWithVideos | null {
+  const db = loadDb();
+  const prop = db.properties.find((p) => p.id === propertyId);
+  if (!prop) return null;
+  if (!prop.madmounQrUrl) {
+    throw new PermitReviewError('NO_PERMIT_LINK', 'The agent has not submitted a DLD permit link yet.');
+  }
+  if (action === 'approve' && !parseDldPermitLink(prop.madmounQrUrl).ok) {
+    throw new PermitReviewError('INVALID_PERMIT_LINK', 'The stored link is not a DLD Trakheesi link.');
+  }
+
+  const now = new Date().toISOString();
+  const previousStatus = prop.permitStatus;
+  const nextStatus: PermitStatus = action === 'approve' ? 'approved' : 'rejected';
+  prop.permitStatus = nextStatus;
+  prop.isVerified = nextStatus === 'approved';
+  prop.permitReview = {
+    ...prop.permitReview,
+    reviewedAt: now,
+    reviewedById: actor.id,
+    reviewedByName: actor.fullName,
+    reason: action === 'reject' ? reason?.trim() || undefined : undefined,
+  };
+  prop.updatedAt = now;
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: action === 'approve' ? 'permit.approved' : 'permit.rejected',
+    entityType: 'property',
+    entityId: prop.id,
+    metadata: {
+      permitNumber: prop.permitNumber,
+      previousStatus,
+      ...(prop.permitReview.reason ? { reason: prop.permitReview.reason } : {}),
+    },
+  });
+  return publishPropertyUpdated(db, prop, now);
+}
+
+export interface PermitQueueRow {
+  propertyId: string;
+  slug: string;
+  titleEn: string;
+  titleAr: string;
+  community: string;
+  agentName: string;
+  agentBrn: string;
+  ownerId: string;
+  permitNumber: string;
+  madmounQrUrl: string;
+  looksLikeMadmoun: boolean;
+  permitStatus: PermitStatus;
+  permitReview?: Property['permitReview'];
+  updatedAt: string;
+}
+
+/**
+ * Listings with their permit review state. Admins see every listing; other roles see only
+ * their own. Pending items come first.
+ */
+export function listPermitRows(viewer: SessionUser, seeAll: boolean): PermitQueueRow[] {
+  const db = loadDb();
+  const order: Record<PermitStatus, number> = { pending: 0, rejected: 1, not_submitted: 2, approved: 3 };
+  return db.properties
+    .filter((p) => seeAll || p.ownerId === viewer.id)
+    .map((p) => {
+      const link = parseDldPermitLink(p.madmounQrUrl);
+      return {
+        propertyId: p.id,
+        slug: p.slug,
+        titleEn: p.titleEn,
+        titleAr: p.titleAr,
+        community: p.community,
+        agentName: p.agentName,
+        agentBrn: p.agentBrn,
+        ownerId: p.ownerId,
+        permitNumber: p.permitNumber,
+        madmounQrUrl: p.madmounQrUrl,
+        looksLikeMadmoun: link.ok && link.looksLikeMadmoun,
+        permitStatus: p.permitStatus ?? 'not_submitted',
+        permitReview: p.permitReview,
+        updatedAt: p.updatedAt,
+      };
+    })
+    .sort(
+      (a, b) =>
+        order[a.permitStatus] - order[b.permitStatus] || b.updatedAt.localeCompare(a.updatedAt)
+    );
 }
 
 export function createVideoUploadSession(params: {

@@ -3,7 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import QRCode from 'qrcode';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { parseDldPermitLink } from '@/lib/dld-permit';
 import type { PropertyStatus, VideoUploadStatus } from '@/types/domain';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -143,24 +145,38 @@ export function UploadProgressRing({
   );
 }
 
+/**
+ * DLD Madmoun QR block. The QR encodes the exact link from the agent's DLD QR and is shown
+ * only once an admin has approved it; until then the card says the permit is not yet verified.
+ */
 export function MadmounQrCard({
   permitNumber,
   verifyUrl,
+  verified = false,
   label,
   helperText,
   compact = false,
 }: {
   permitNumber: string;
   verifyUrl: string;
+  /** property.isVerified: true only after admin approval of the DLD link. */
+  verified?: boolean;
   label: string;
   helperText: string;
   compact?: boolean;
 }) {
+  const t = useTranslations('permit');
   const [svgMarkup, setSvgMarkup] = useState<string>('');
+  const dldLink = parseDldPermitLink(verifyUrl);
+  const qrUrl = verified && dldLink.ok ? dldLink.url : '';
 
   useEffect(() => {
     let active = true;
-    QRCode.toString(verifyUrl || `https://dubailand.gov.ae/?permit=${permitNumber}`, {
+    if (!qrUrl) {
+      setSvgMarkup('');
+      return;
+    }
+    QRCode.toString(qrUrl, {
       type: 'svg',
       margin: 1,
       width: compact ? 64 : 88,
@@ -173,25 +189,56 @@ export function MadmounQrCard({
     return () => {
       active = false;
     };
-  }, [verifyUrl, permitNumber, compact]);
+  }, [qrUrl, compact]);
+
+  if (!qrUrl) {
+    return (
+      <div
+        className="flex items-start gap-3 p-3 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--status-warn-bg)]"
+        data-testid="permit-unverified"
+      >
+        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-[var(--status-warn)]" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-[var(--status-warn)]">{t('notVerifiedTitle')}</div>
+          <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-secondary)]">
+            {t('notVerifiedBody', { permit: permitNumber })}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
-      <div
+    <div
+      className="flex items-center gap-3 p-3 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)]"
+      data-testid="permit-verified"
+    >
+      <a
+        href={qrUrl}
+        target="_blank"
+        rel="noopener noreferrer"
         className="shrink-0 bg-white p-1.5 rounded-[4px] border border-[var(--border-subtle)]"
-        aria-label={`Madmoun QR code for permit ${permitNumber}`}
+        aria-label={t('qrAria', { permit: permitNumber })}
         dangerouslySetInnerHTML={{ __html: svgMarkup }}
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--status-live)]">
-          <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+          <ShieldCheck className="w-3.5 h-3.5 shrink-0" aria-hidden />
           <span>{label}</span>
         </div>
         <div className="mt-1 font-mono-code text-xs font-semibold text-[var(--text-primary)] bidi-ltr inline-block">
           #{permitNumber}
         </div>
         <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-muted)]">
-          {helperText}
+          {helperText}{' '}
+          <a
+            href={qrUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline text-[var(--text-secondary)]"
+          >
+            {t('openDld')}
+          </a>
         </p>
       </div>
     </div>
