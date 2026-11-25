@@ -144,8 +144,13 @@ export function VerticalReelsFeed({
                         </span>
                       ) : null}
                     </div>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-mono-code text-[#34D399] bidi-ltr">
-                      <ShieldCheck className="w-3.5 h-3.5" />#{prop.permitNumber}
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono-code bidi-ltr ${
+                        prop.isVerified ? 'text-[#34D399]' : 'text-white/70'
+                      }`}
+                    >
+                      {prop.isVerified ? <ShieldCheck className="w-3.5 h-3.5" aria-label={t('permit.badgeVerified')} /> : null}
+                      #{prop.permitNumber}
                     </span>
                   </div>
 

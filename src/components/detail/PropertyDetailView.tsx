@@ -359,6 +359,7 @@ export function PropertyDetailView({
             <MadmounQrCard
               permitNumber={property.permitNumber}
               verifyUrl={property.madmounQrUrl}
+              verified={property.isVerified}
               label={t('listing.madmounQr')}
               helperText={t('listing.verifyDld')}
             />

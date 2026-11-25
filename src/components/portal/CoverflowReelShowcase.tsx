@@ -105,7 +105,7 @@ export function CoverflowReelShowcase({
           const community = prop.community;
           const price = formatCurrency(prop.priceAed, currency, locale);
           const area = formatArea(prop.areaSqft, locale);
-          const isVerified = Boolean(prop.permitNumber);
+          const isVerified = prop.isVerified;
 
           return (
             <div

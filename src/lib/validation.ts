@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from './password';
+import { DLD_LINK_ERROR_MESSAGES, parseDldPermitLink } from './dld-permit';
 
 export const ALLOWED_VIDEO_MIMES = [
   'video/mp4',
@@ -10,6 +12,36 @@ export const MAX_VIDEO_SIZE_BYTES = 250 * 1024 * 1024; // 250 MB
 export const MAX_VIDEO_DURATION_SEC = 180; // 3 minutes
 
 export const TRAKHEESI_REGEX = /^[A-Z0-9-]{6,24}$/i;
+
+/** A link read from the agent's DLD Madmoun QR: https on the DLD Trakheesi host only. */
+export const dldPermitLinkSchema = z
+  .string()
+  .trim()
+  .superRefine((value, ctx) => {
+    const result = parseDldPermitLink(value);
+    if (!result.ok) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: DLD_LINK_ERROR_MESSAGES[result.code] });
+    }
+  });
+
+export const submitPermitLinkSchema = z.object({
+  madmounQrUrl: dldPermitLinkSchema,
+});
+
+export const permitReviewSchema = z
+  .object({
+    action: z.enum(['approve', 'reject']),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.action === 'reject' && (!data.reason || data.reason.length < 3)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'Give the agent a reason so they can fix the link.',
+      });
+    }
+  });
 
 export const createPropertySchema = z
   .object({
@@ -38,6 +70,8 @@ export const createPropertySchema = z
       .string()
       .trim()
       .regex(TRAKHEESI_REGEX, 'Valid Trakheesi permit number (6–24 alphanumeric chars) is required'),
+    // Optional at creation: the agent can add it later from the dashboard before the badge shows.
+    madmounQrUrl: z.union([z.literal(''), dldPermitLinkSchema]).optional(),
     developerName: z.string().trim().max(120).optional(),
     projectNumber: z.string().trim().max(60).optional(),
     escrowAccount: z.string().trim().max(60).optional(),
@@ -113,9 +147,39 @@ export const createEnquirySchema = z.object({
   message: z.string().trim().max(1500).optional(),
 });
 
-export const switchRoleSchema = z.object({
-  role: z.enum(['admin', 'manager', 'verified_agent', 'agent', 'viewer']),
+export const userRoleSchema = z.enum(['admin', 'manager', 'verified_agent', 'agent', 'viewer']);
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Valid email address is required').max(254),
+  password: z.string().min(1, 'Password is required').max(MAX_PASSWORD_LENGTH),
 });
+
+export const createUserSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email('Valid email address is required').max(254),
+    password: z
+      .string()
+      .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
+      .max(MAX_PASSWORD_LENGTH),
+    fullName: z.string().trim().min(2, 'Full name is required').max(120),
+    role: userRoleSchema,
+    orgName: z.string().trim().max(160).optional(),
+    orn: z.string().trim().max(40).optional(),
+    brn: z.string().trim().max(40).optional(),
+    whatsappNumber: z.string().trim().max(30).optional(),
+    locale: z.enum(['en', 'ar']).default('en'),
+  })
+  .strict();
+
+export const updateUserAccessSchema = z
+  .object({
+    role: userRoleSchema.optional(),
+    disabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => v.role !== undefined || v.disabled !== undefined, {
+    message: 'Provide role and/or disabled',
+  });
 
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>;
 export type InitiateUploadInput = z.infer<typeof initiateUploadSchema>;

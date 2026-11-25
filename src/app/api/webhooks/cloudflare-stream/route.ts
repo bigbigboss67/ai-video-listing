@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { apiError } from '@/lib/api-error';
 import { verifyCloudflareWebhookSignature } from '@/lib/video-provider';
 import { finalizeVideoProcessing, getVideoByAssetId } from '@/lib/store';
-import { getDemoUser } from '@/lib/auth';
+import { SYSTEM_WEBHOOK_ACTOR } from '@/lib/demo-accounts';
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     if (payload.uid && payload.readyToStream) {
       const video = getVideoByAssetId(payload.uid);
       if (video) {
-        finalizeVideoProcessing(video.id, getDemoUser('admin'), true);
+        finalizeVideoProcessing(video.id, SYSTEM_WEBHOOK_ACTOR, true);
       }
     }
 

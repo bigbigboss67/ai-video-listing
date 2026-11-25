@@ -8,6 +8,8 @@ import {
   Film,
   Globe,
   LayoutDashboard,
+  LogIn,
+  LogOut,
   MapPin,
   Moon,
   PlusCircle,
@@ -16,14 +18,14 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/components/providers/AppProvider';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
-import type { CurrencyCode, UserRole } from '@/types/domain';
+import type { CurrencyCode } from '@/types/domain';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, toggleTheme, currency, setCurrency, user, switchRole } =
+  const { theme, toggleTheme, currency, setCurrency, user, signOut } =
     useAppContext();
   const { connectionState } = useRealtimeSync();
 
@@ -36,6 +38,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const handleLocaleSwitch = () => {
     router.replace(pathname, { locale: nextLocale });
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/');
+    router.refresh();
   };
 
   return (
@@ -140,19 +148,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <option value="GBP">GBP</option>
             </select>
 
-            {/* Session Role Switcher (Server-signed cookie) */}
-            <select
-              aria-label={t('roles.switchRole')}
-              value={user?.role ?? 'verified_agent'}
-              onChange={(e) => switchRole(e.target.value as UserRole)}
-              className="hidden md:block h-9 px-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs font-medium text-[var(--text-primary)] cursor-pointer"
-            >
-              <option value="verified_agent">{t('roles.verified_agent')}</option>
-              <option value="agent">{t('roles.agent')}</option>
-              <option value="manager">{t('roles.manager')}</option>
-              <option value="admin">{t('roles.admin')}</option>
-              <option value="viewer">{t('roles.viewer')}</option>
-            </select>
+            {/* Signed-in account (role comes from the server-side user record) */}
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden md:flex flex-col items-end leading-tight max-w-[180px]">
+                  <span className="text-xs font-semibold truncate max-w-full">{user.fullName}</span>
+                  <span className="text-[11px] text-[var(--text-muted)]">{t(`roles.${user.role}`)}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  aria-label={t('auth.signOut')}
+                  className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-xs font-semibold cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('auth.signOut')}</span>
+                </button>
+              </div>
+            ) : (
+              <Link
+                href={pathname === '/login' ? '/login' : `/login?next=${encodeURIComponent(pathname)}`}
+                className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] text-xs font-semibold"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{t('auth.signIn')}</span>
+              </Link>
+            )}
 
             {/* Locale EN / AR Toggle */}
             <button

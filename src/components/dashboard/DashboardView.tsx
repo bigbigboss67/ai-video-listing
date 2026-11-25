@@ -12,7 +12,9 @@ import {
   Lock,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
+  Users,
   XCircle,
 } from 'lucide-react';
 import type { AuditLog, PropertyVideo } from '@/types/domain';
@@ -20,6 +22,10 @@ import { useAppContext } from '@/components/providers/AppProvider';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { formatDate, formatDuration } from '@/lib/format';
 import { Button, EmptyState, StatusPill } from '@/components/ui/Primitives';
+import { UserManagementPanel } from './UserManagementPanel';
+import { PermitReviewPanel } from './PermitReviewPanel';
+
+type DashboardTab = 'inventory' | 'moderation' | 'permits' | 'analytics' | 'audit' | 'team';
 
 interface DashboardVideoRow extends PropertyVideo {
   propertyTitleEn: string;
@@ -31,6 +37,7 @@ interface DashboardVideoRow extends PropertyVideo {
 
 interface DashboardPayload {
   permissions: {
+    canManageUsers: boolean;
     canModerate: boolean;
     canViewAuditLogs: boolean;
   };
@@ -61,21 +68,18 @@ export function DashboardView() {
   const locale = useLocale();
   const { user } = useAppContext();
 
-  const [tab, setTab] = useState<'inventory' | 'moderation' | 'analytics' | 'audit'>(
-    'inventory'
-  );
+  const [tab, setTab] = useState<DashboardTab>('inventory');
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
-  const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setForbidden(false);
     try {
       const res = await fetch('/api/dashboard', { cache: 'no-store' });
-      if (res.status === 403) {
+      if (res.status === 401 || res.status === 403) {
         setForbidden(true);
         setData(null);
         return;
@@ -113,21 +117,6 @@ export function DashboardView() {
       }),
     });
     if (res.ok) {
-      await loadDashboard();
-    }
-  };
-
-  const handlePdplExport = () => {
-    window.open('/api/account/me', '_blank');
-  };
-
-  const handlePdplErase = async () => {
-    const res = await fetch('/api/account/me', { method: 'DELETE' });
-    if (res.ok) {
-      const json = (await res.json()) as { erasedReceiptId: string };
-      setPrivacyNotice(
-        `${t('dashboard.deleteConfirm')} (Receipt: ${json.erasedReceiptId})`
-      );
       await loadDashboard();
     }
   };
@@ -179,10 +168,15 @@ export function DashboardView() {
           action={
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)]">
               <Lock className="w-4 h-4" />
-              Role: {user?.role}
+              {user ? t(`roles.${user.role}`) : t('auth.signIn')}
             </span>
           }
         />
+        {user ? (
+          <div className="mt-6">
+            <PrivacyRightsPanel />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -242,8 +236,12 @@ export function DashboardView() {
             label: `${t('dashboard.tabModeration')} (${pendingVideos.length})`,
             icon: FileCheck2,
           },
+          { id: 'permits', label: t('permit.tab'), icon: ShieldCheck },
           { id: 'analytics', label: t('dashboard.tabAnalytics'), icon: BarChart3 },
           { id: 'audit', label: t('dashboard.tabAudit'), icon: ShieldAlert },
+          ...(data?.permissions.canManageUsers
+            ? [{ id: 'team', label: t('team.tab'), icon: Users }]
+            : []),
         ].map((item) => {
           const Icon = item.icon;
           const active = tab === item.id;
@@ -251,11 +249,7 @@ export function DashboardView() {
             <button
               key={item.id}
               type="button"
-              onClick={() =>
-                setTab(
-                  item.id as 'inventory' | 'moderation' | 'analytics' | 'audit'
-                )
-              }
+              onClick={() => setTab(item.id as DashboardTab)}
               className={`inline-flex items-center gap-1.5 px-3.5 h-9 rounded-[6px] text-xs font-semibold cursor-pointer ${
                 active
                   ? 'bg-[var(--accent-action)] text-[var(--accent-action-text)]'
@@ -417,7 +411,7 @@ export function DashboardView() {
                   </div>
                 ) : (
                   <span className="text-xs text-[var(--text-muted)]">
-                    Switch to Admin / Manager role to approve
+                    {t('dashboard.moderatorOnly')}
                   </span>
                 )}
               </div>
@@ -494,6 +488,12 @@ export function DashboardView() {
             </table>
           </div>
         </div>
+      ) : tab === 'permits' ? (
+        user ? <PermitReviewPanel currentUserId={user.id} /> : null
+      ) : tab === 'team' ? (
+        data.permissions.canManageUsers && user ? (
+          <UserManagementPanel currentUserId={user.id} />
+        ) : null
       ) : !data.permissions.canViewAuditLogs ? (
         <EmptyState
           title="Admin / Manager Only"
@@ -533,43 +533,73 @@ export function DashboardView() {
         </div>
       )}
 
-      {/* UAE PDPL & GDPR Data Rights Section */}
-      <section className="p-4 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-semibold">{t('dashboard.gdprTitle')}</h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-            Federal Decree-Law No. 45 of 2021 (PDPL) & GDPR Data Portability / Right to Erasure.
+      <PrivacyRightsPanel />
+    </div>
+  );
+}
+
+/** UAE PDPL / GDPR self-service data rights for the signed-in account (any role). */
+function PrivacyRightsPanel() {
+  const t = useTranslations();
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const handleExport = () => {
+    window.open('/api/account/me', '_blank', 'noopener');
+  };
+
+  const handleErase = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/account/me', { method: 'DELETE' });
+      if (res.ok) {
+        const json = (await res.json()) as { erasedReceiptId: string };
+        setNotice(`${t('dashboard.deleteConfirm')} (Receipt: ${json.erasedReceiptId})`);
+      } else {
+        setNotice(t('dashboard.deleteFailed'));
+      }
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <section className="p-4 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h2 className="text-sm font-semibold">{t('dashboard.gdprTitle')}</h2>
+        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+          Federal Decree-Law No. 45 of 2021 (PDPL) & GDPR Data Portability / Right to Erasure.
+        </p>
+        {notice ? (
+          <p role="status" className="mt-2 text-xs font-medium text-[var(--status-live)]">
+            {notice}
           </p>
-          {privacyNotice ? (
-            <p
-              role="status"
-              className="mt-2 text-xs font-medium text-[var(--status-live)]"
-            >
-              {privacyNotice}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={handlePdplExport}
-          >
-            <Download className="w-3.5 h-3.5" />
-            {t('dashboard.exportData')}
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            size="sm"
-            onClick={handlePdplErase}
-          >
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="secondary" size="sm" onClick={handleExport}>
+          <Download className="w-3.5 h-3.5" />
+          {t('dashboard.exportData')}
+        </Button>
+        {confirming ? (
+          <>
+            <Button type="button" variant="danger" size="sm" disabled={busy} onClick={handleErase}>
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('dashboard.deleteConfirmAction')}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+              {t('dashboard.cancel')}
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="danger" size="sm" onClick={() => setConfirming(true)}>
             <Trash2 className="w-3.5 h-3.5" />
             {t('dashboard.deleteAccount')}
           </Button>
-        </div>
-      </section>
-    </div>
+        )}
+      </div>
+    </section>
   );
 }

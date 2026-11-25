@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { canCreateProperty, canViewDashboard, getCurrentSessionUser } from '@/lib/auth';
-import { apiError, checkRateLimit, zodApiError } from '@/lib/api-error';
+import { apiError, checkRateLimit, unauthenticatedError, zodApiError } from '@/lib/api-error';
 import { createProperty, listProperties } from '@/lib/store';
 import { createPropertySchema } from '@/lib/validation';
 import type { PropertyStatus, PropertyType } from '@/types/domain';
@@ -64,6 +64,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const user = await getCurrentSessionUser();
+  if (!user) return unauthenticatedError();
   if (!canCreateProperty(user.role)) {
     return apiError(
       403,

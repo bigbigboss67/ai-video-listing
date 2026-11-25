@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { canModerate, getCurrentSessionUser } from '@/lib/auth';
-import { apiError, zodApiError } from '@/lib/api-error';
+import { apiError, unauthenticatedError, zodApiError } from '@/lib/api-error';
 import { moderateVideo } from '@/lib/store';
 import { moderationActionSchema } from '@/lib/validation';
 
@@ -9,6 +9,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentSessionUser();
+  if (!user) return unauthenticatedError();
   if (!canModerate(user.role)) {
     return apiError(
       403,

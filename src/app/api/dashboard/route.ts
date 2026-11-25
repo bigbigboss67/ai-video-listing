@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import {
+  canManageUsers,
   canModerate,
   canViewAuditLogs,
   canViewDashboard,
   getCurrentSessionUser,
 } from '@/lib/auth';
-import { apiError } from '@/lib/api-error';
+import { apiError, unauthenticatedError } from '@/lib/api-error';
 import {
   getAnalyticsSummary,
   listAllVideos,
@@ -14,6 +15,7 @@ import {
 
 export async function GET() {
   const user = await getCurrentSessionUser();
+  if (!user) return unauthenticatedError();
   if (!canViewDashboard(user.role)) {
     return apiError(
       403,
@@ -31,6 +33,7 @@ export async function GET() {
     {
       user,
       permissions: {
+        canManageUsers: canManageUsers(user.role),
         canModerate: canModerate(user.role),
         canViewAuditLogs: canViewAuditLogs(user.role),
       },

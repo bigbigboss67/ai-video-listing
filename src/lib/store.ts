@@ -10,11 +10,15 @@ import {
   makeArchitecturalPoster,
 } from './seed-data';
 import { slugify, toAed } from './format';
+import { parseDldPermitLink } from './dld-permit';
 import { realtimeBroker } from './realtime-broker';
+import { DEFAULT_DEMO_PASSWORD, DEMO_PROFILES } from './demo-accounts';
+import { hashPassword } from './password';
 import type {
   AuditLog,
   Enquiry,
   ModerationStatus,
+  PermitStatus,
   PaginatedResponse,
   Property,
   PropertyStatus,
@@ -22,6 +26,7 @@ import type {
   PropertyVideo,
   PropertyWithVideos,
   SessionUser,
+  UserRole,
   VideoUploadStatus,
 } from '@/types/domain';
 import type { CreateEnquiryInput, CreatePropertyInput } from './validation';
@@ -41,7 +46,18 @@ export interface TusSessionRecord {
   createdAt: string;
 }
 
+export interface UserRecord extends SessionUser {
+  passwordHash: string;
+  /** Bumped to revoke every outstanding session cookie for this user. */
+  sessionVersion: number;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+}
+
 interface LocalDatabase {
+  users: UserRecord[];
   properties: Property[];
   videos: PropertyVideo[];
   enquiries: Enquiry[];
@@ -61,14 +77,88 @@ function ensureDirs(): void {
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+let demoHashCache: { password: string; hash: string } | null = null;
+
+/**
+ * Seed login accounts:
+ *  - Demo accounts (one per role) only outside production.
+ *  - A bootstrap admin from BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD (any env).
+ * Returns true when users were added.
+ */
+function seedUsers(db: LocalDatabase): boolean {
+  let changed = false;
+  const now = new Date().toISOString();
+
+  if (process.env.NODE_ENV !== 'production') {
+    const demoPassword = process.env.DEMO_ACCOUNT_PASSWORD || DEFAULT_DEMO_PASSWORD;
+    if (!demoHashCache || demoHashCache.password !== demoPassword) {
+      demoHashCache = { password: demoPassword, hash: hashPassword(demoPassword) };
+    }
+    for (const profile of Object.values(DEMO_PROFILES)) {
+      if (db.users.some((u) => u.id === profile.id || u.email === profile.email)) continue;
+      db.users.push({
+        ...structuredClone(profile),
+        passwordHash: demoHashCache.hash,
+        sessionVersion: 1,
+        disabled: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      changed = true;
+    }
+  }
+
+  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (bootstrapEmail && bootstrapPassword && bootstrapPassword.length >= 10) {
+    if (!db.users.some((u) => u.email === bootstrapEmail)) {
+      db.users.push({
+        id: `usr-${crypto.randomUUID()}`,
+        role: 'admin',
+        fullName: process.env.BOOTSTRAP_ADMIN_NAME?.trim() || 'Platform Administrator',
+        email: bootstrapEmail,
+        locale: 'en',
+        passwordHash: hashPassword(bootstrapPassword),
+        sessionVersion: 1,
+        disabled: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Stores created before permit review existed carry a portal-generated QR link (which 404s)
+ * and a "verified" flag set from the permit number alone. Drop the fake link and the badge;
+ * a real DLD link already on file is kept but goes back to review.
+ */
+function upgradeLegacyPermitFields(db: LocalDatabase): boolean {
+  let changed = false;
+  for (const prop of db.properties) {
+    if (prop.permitStatus) continue;
+    const link = parseDldPermitLink(prop.madmounQrUrl);
+    prop.madmounQrUrl = link.ok ? link.url : '';
+    prop.permitStatus = link.ok ? 'pending' : 'not_submitted';
+    prop.isVerified = false;
+    changed = true;
+  }
+  return changed;
+}
+
 function createInitialDb(): LocalDatabase {
-  return {
+  const db: LocalDatabase = {
+    users: [],
     properties: structuredClone(SEED_PROPERTIES),
     videos: structuredClone(SEED_VIDEOS),
     enquiries: structuredClone(SEED_ENQUIRIES),
     auditLogs: structuredClone(SEED_AUDIT_LOGS),
     tusSessions: {},
   };
+  seedUsers(db);
+  return db;
 }
 
 const globalForDb = globalThis as unknown as {
@@ -83,6 +173,11 @@ function loadDb(): LocalDatabase {
       const raw = fs.readFileSync(DB_FILE, 'utf8');
       const parsed = JSON.parse(raw) as LocalDatabase;
       if (Array.isArray(parsed.properties) && Array.isArray(parsed.videos)) {
+        // Backward-compatible upgrade of stores created before user accounts existed
+        if (!Array.isArray(parsed.users)) parsed.users = [];
+        const usersAdded = seedUsers(parsed);
+        const permitsUpgraded = upgradeLegacyPermitFields(parsed);
+        if (usersAdded || permitsUpgraded) persistDb(parsed);
         globalForDb.__makanreelDb = parsed;
         return parsed;
       }
@@ -269,6 +364,8 @@ export function createProperty(
     : baseSlug;
   const now = new Date().toISOString();
   const priceAed = toAed(input.price, input.currency);
+  const parsedPermitLink = parseDldPermitLink(input.madmounQrUrl);
+  const initialPermitLink = parsedPermitLink.ok ? parsedPermitLink.url : '';
 
   const prop: Property = {
     id,
@@ -294,7 +391,8 @@ export function createProperty(
     ownership: input.ownership,
     availability: input.availability,
     permitNumber: input.permitNumber,
-    madmounQrUrl: `https://dubailand.gov.ae/en/eservices/trakheesi-verification?permit=${encodeURIComponent(input.permitNumber)}`,
+    // Only the link from the agent's own DLD QR; the portal never builds one from the permit number.
+    madmounQrUrl: initialPermitLink,
     developerName: input.developerName,
     projectNumber: input.projectNumber,
     escrowAccount: input.escrowAccount,
@@ -306,7 +404,10 @@ export function createProperty(
     community: input.community,
     lat: input.lat,
     lng: input.lng,
-    isVerified: Boolean(input.permitNumber),
+    // Verified only after an admin approves the DLD permit link.
+    isVerified: false,
+    permitStatus: initialPermitLink ? 'pending' : 'not_submitted',
+    ...(initialPermitLink ? { permitReview: { submittedAt: now, submittedById: actor.id } } : {}),
     galleryUrls: [makeArchitecturalPoster(input.titleEn, input.community)],
     units: [
       {
@@ -348,6 +449,170 @@ export function createProperty(
   });
 
   return hydrated;
+}
+
+// ---------------------------------------------------------------------------
+// DLD permit link review
+// ---------------------------------------------------------------------------
+
+export type PermitReviewAction = 'approve' | 'reject';
+
+export class PermitReviewError extends Error {
+  constructor(
+    public readonly code: 'NO_PERMIT_LINK' | 'INVALID_PERMIT_LINK',
+    message: string
+  ) {
+    super(message);
+    this.name = 'PermitReviewError';
+  }
+}
+
+function publishPropertyUpdated(db: LocalDatabase, prop: Property, now: string): PropertyWithVideos {
+  // No property payload: the SSE stream is public and the hydrated record includes unpublished videos.
+  // Listeners (e.g. the dashboard) refetch through their own authorised endpoints.
+  realtimeBroker.publish({
+    id: crypto.randomUUID(),
+    type: 'property.updated',
+    timestamp: now,
+    propertyId: prop.id,
+  });
+  return hydrateProperty(db, prop);
+}
+
+/**
+ * Store the link from the agent's DLD Madmoun QR and send it to admin review.
+ * Any change of link removes the verified badge until an admin approves the new one.
+ * Authorization (owner or admin) is enforced by the API route.
+ */
+export function submitPermitLink(
+  propertyId: string,
+  rawLink: string,
+  actor: SessionUser
+): PropertyWithVideos | null {
+  const parsed = parseDldPermitLink(rawLink);
+  if (!parsed.ok) throw new PermitReviewError('INVALID_PERMIT_LINK', `Invalid DLD link (${parsed.code}).`);
+  const db = loadDb();
+  const prop = db.properties.find((p) => p.id === propertyId);
+  if (!prop) return null;
+
+  const now = new Date().toISOString();
+  const previousStatus = prop.permitStatus;
+  prop.madmounQrUrl = parsed.url;
+  prop.permitStatus = 'pending';
+  prop.isVerified = false;
+  prop.permitReview = { submittedAt: now, submittedById: actor.id };
+  prop.updatedAt = now;
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: 'permit.submitted',
+    entityType: 'property',
+    entityId: prop.id,
+    metadata: {
+      permitNumber: prop.permitNumber,
+      previousStatus,
+      looksLikeMadmoun: parsed.looksLikeMadmoun,
+    },
+  });
+  return publishPropertyUpdated(db, prop, now);
+}
+
+/** Admin decision on a submitted DLD permit link. Approval is what turns the verified badge on. */
+export function reviewPermit(
+  propertyId: string,
+  action: PermitReviewAction,
+  actor: SessionUser,
+  reason?: string
+): PropertyWithVideos | null {
+  const db = loadDb();
+  const prop = db.properties.find((p) => p.id === propertyId);
+  if (!prop) return null;
+  if (!prop.madmounQrUrl) {
+    throw new PermitReviewError('NO_PERMIT_LINK', 'The agent has not submitted a DLD permit link yet.');
+  }
+  if (action === 'approve' && !parseDldPermitLink(prop.madmounQrUrl).ok) {
+    throw new PermitReviewError('INVALID_PERMIT_LINK', 'The stored link is not a DLD Trakheesi link.');
+  }
+
+  const now = new Date().toISOString();
+  const previousStatus = prop.permitStatus;
+  const nextStatus: PermitStatus = action === 'approve' ? 'approved' : 'rejected';
+  prop.permitStatus = nextStatus;
+  prop.isVerified = nextStatus === 'approved';
+  prop.permitReview = {
+    ...prop.permitReview,
+    reviewedAt: now,
+    reviewedById: actor.id,
+    reviewedByName: actor.fullName,
+    reason: action === 'reject' ? reason?.trim() || undefined : undefined,
+  };
+  prop.updatedAt = now;
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: action === 'approve' ? 'permit.approved' : 'permit.rejected',
+    entityType: 'property',
+    entityId: prop.id,
+    metadata: {
+      permitNumber: prop.permitNumber,
+      previousStatus,
+      ...(prop.permitReview.reason ? { reason: prop.permitReview.reason } : {}),
+    },
+  });
+  return publishPropertyUpdated(db, prop, now);
+}
+
+export interface PermitQueueRow {
+  propertyId: string;
+  slug: string;
+  titleEn: string;
+  titleAr: string;
+  community: string;
+  agentName: string;
+  agentBrn: string;
+  ownerId: string;
+  permitNumber: string;
+  madmounQrUrl: string;
+  looksLikeMadmoun: boolean;
+  permitStatus: PermitStatus;
+  permitReview?: Property['permitReview'];
+  updatedAt: string;
+}
+
+/**
+ * Listings with their permit review state. Admins see every listing; other roles see only
+ * their own. Pending items come first.
+ */
+export function listPermitRows(viewer: SessionUser, seeAll: boolean): PermitQueueRow[] {
+  const db = loadDb();
+  const order: Record<PermitStatus, number> = { pending: 0, rejected: 1, not_submitted: 2, approved: 3 };
+  return db.properties
+    .filter((p) => seeAll || p.ownerId === viewer.id)
+    .map((p) => {
+      const link = parseDldPermitLink(p.madmounQrUrl);
+      return {
+        propertyId: p.id,
+        slug: p.slug,
+        titleEn: p.titleEn,
+        titleAr: p.titleAr,
+        community: p.community,
+        agentName: p.agentName,
+        agentBrn: p.agentBrn,
+        ownerId: p.ownerId,
+        permitNumber: p.permitNumber,
+        madmounQrUrl: p.madmounQrUrl,
+        looksLikeMadmoun: link.ok && link.looksLikeMadmoun,
+        permitStatus: p.permitStatus ?? 'not_submitted',
+        permitReview: p.permitReview,
+        updatedAt: p.updatedAt,
+      };
+    })
+    .sort(
+      (a, b) =>
+        order[a.permitStatus] - order[b.permitStatus] || b.updatedAt.localeCompare(a.updatedAt)
+    );
 }
 
 export function createVideoUploadSession(params: {
@@ -455,6 +720,11 @@ export function createVideoUploadSession(params: {
 export function getTusSession(tusId: string): TusSessionRecord | null {
   const db = loadDb();
   return db.tusSessions[tusId] ?? null;
+}
+
+export function getVideoById(videoId: string): PropertyVideo | null {
+  const db = loadDb();
+  return db.videos.find((v) => v.id === videoId) ?? null;
 }
 
 export function getVideoByAssetId(assetId: string): PropertyVideo | null {
@@ -790,4 +1060,148 @@ export function eraseUserData(actor: SessionUser): {
   });
 
   return { erasedEnquiries, erasedReceiptId: log.id };
+}
+
+// ---------------------------------------------------------------------------
+// User accounts (local-mode credential store)
+// ---------------------------------------------------------------------------
+
+export function toSessionUser(record: UserRecord): SessionUser {
+  return {
+    id: record.id,
+    role: record.role,
+    fullName: record.fullName,
+    email: record.email,
+    orgName: record.orgName,
+    orn: record.orn,
+    brn: record.brn,
+    whatsappNumber: record.whatsappNumber,
+    locale: record.locale,
+  };
+}
+
+export type PublicUserRecord = SessionUser & {
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+};
+
+function toPublicUser(record: UserRecord): PublicUserRecord {
+  return {
+    ...toSessionUser(record),
+    disabled: record.disabled,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    lastLoginAt: record.lastLoginAt,
+  };
+}
+
+export function findUserByEmail(email: string): UserRecord | null {
+  const db = loadDb();
+  const normalized = email.trim().toLowerCase();
+  return db.users.find((u) => u.email.toLowerCase() === normalized) ?? null;
+}
+
+export function getUserById(id: string): UserRecord | null {
+  const db = loadDb();
+  return db.users.find((u) => u.id === id) ?? null;
+}
+
+export function listUsers(): PublicUserRecord[] {
+  const db = loadDb();
+  return db.users
+    .map(toPublicUser)
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+}
+
+export function recordUserLogin(id: string): void {
+  const db = loadDb();
+  const user = db.users.find((u) => u.id === id);
+  if (!user) return;
+  user.lastLoginAt = new Date().toISOString();
+  persistDb(db);
+}
+
+export function createUserAccount(
+  input: {
+    email: string;
+    password: string;
+    fullName: string;
+    role: UserRole;
+    orgName?: string;
+    orn?: string;
+    brn?: string;
+    whatsappNumber?: string;
+    locale?: 'en' | 'ar';
+  },
+  actor: SessionUser
+): { ok: true; user: PublicUserRecord } | { ok: false; code: 'EMAIL_TAKEN' } {
+  const db = loadDb();
+  const email = input.email.trim().toLowerCase();
+  if (db.users.some((u) => u.email.toLowerCase() === email)) {
+    return { ok: false, code: 'EMAIL_TAKEN' };
+  }
+  const now = new Date().toISOString();
+  const record: UserRecord = {
+    id: `usr-${crypto.randomUUID()}`,
+    role: input.role,
+    fullName: input.fullName.trim(),
+    email,
+    orgName: input.orgName,
+    orn: input.orn,
+    brn: input.brn,
+    whatsappNumber: input.whatsappNumber,
+    locale: input.locale ?? 'en',
+    passwordHash: hashPassword(input.password),
+    sessionVersion: 1,
+    disabled: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.users.push(record);
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: 'user.created',
+    entityType: 'user_account',
+    entityId: record.id,
+    metadata: { role: record.role },
+  });
+  return { ok: true, user: toPublicUser(record) };
+}
+
+export function updateUserAccess(
+  id: string,
+  changes: { role?: UserRole; disabled?: boolean },
+  actor: SessionUser
+): PublicUserRecord | null {
+  const db = loadDb();
+  const user = db.users.find((u) => u.id === id);
+  if (!user) return null;
+  const before = { role: user.role, disabled: user.disabled };
+
+  if (changes.role !== undefined) user.role = changes.role;
+  if (changes.disabled !== undefined) user.disabled = changes.disabled;
+  // Any access change revokes the user's existing sessions
+  if (before.role !== user.role || before.disabled !== user.disabled) {
+    user.sessionVersion += 1;
+  }
+  user.updatedAt = new Date().toISOString();
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: 'user.access.updated',
+    entityType: 'user_account',
+    entityId: user.id,
+    metadata: { before, after: { role: user.role, disabled: user.disabled } },
+  });
+  return toPublicUser(user);
+}
+
+export function countActiveAdmins(): number {
+  const db = loadDb();
+  return db.users.filter((u) => u.role === 'admin' && !u.disabled).length;
 }
