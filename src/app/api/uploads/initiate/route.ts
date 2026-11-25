@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { canUploadVideo, getCurrentSessionUser } from '@/lib/auth';
-import { apiError, checkRateLimit, zodApiError } from '@/lib/api-error';
+import { apiError, checkRateLimit, unauthenticatedError, zodApiError } from '@/lib/api-error';
 import { createVideoUploadSession } from '@/lib/store';
 import { initiateUploadSchema } from '@/lib/validation';
 import {
@@ -10,6 +10,7 @@ import {
 
 export async function POST(request: Request) {
   const user = await getCurrentSessionUser();
+  if (!user) return unauthenticatedError();
   if (!canUploadVideo(user.role)) {
     return apiError(
       403,

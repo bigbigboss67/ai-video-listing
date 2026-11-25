@@ -1,116 +1,114 @@
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import type { SessionUser, UserRole } from '@/types/domain';
+import { getUserById, toSessionUser } from './store';
 
 export const SESSION_COOKIE_NAME = 'makanreel_session';
+export const SESSION_TTL_SEC = 60 * 60 * 12; // 12 hours
 
-const DEMO_USERS: Record<UserRole, SessionUser> = {
-  admin: {
-    id: 'usr-admin-01',
-    role: 'admin',
-    fullName: 'Tariq Al-Mansoori',
-    email: 'tariq@makanreel.ae',
-    orgName: 'MakanReel Compliance & Ops',
-    orn: 'ORN-29410',
-    brn: 'BRN-44102',
-    whatsappNumber: '+971501112233',
-    locale: 'en',
-  },
-  manager: {
-    id: 'usr-mgr-01',
-    role: 'manager',
-    fullName: 'Nadia Haddad',
-    email: 'nadia@makanreel.ae',
-    orgName: 'MakanReel Advisory Dubai',
-    orn: 'ORN-29410',
-    brn: 'BRN-51208',
-    whatsappNumber: '+971502223344',
-    locale: 'en',
-  },
-  verified_agent: {
-    id: 'usr-agent-v1',
-    role: 'verified_agent',
-    fullName: 'Layla Al-Rashid',
-    email: 'layla@makanreel.ae',
-    orgName: 'MakanReel Advisory Dubai',
-    orn: 'ORN-29410',
-    brn: 'BRN-58914',
-    whatsappNumber: '+971504445566',
-    locale: 'en',
-  },
-  agent: {
-    id: 'usr-agent-s1',
-    role: 'agent',
-    fullName: 'Omar Khoury',
-    email: 'omar@makanreel.ae',
-    orgName: 'Gulf Prime Properties',
-    orn: 'ORN-31820',
-    brn: 'BRN-62190',
-    whatsappNumber: '+971507778899',
-    locale: 'en',
-  },
-  viewer: {
-    id: 'usr-viewer-01',
-    role: 'viewer',
-    fullName: 'Elena Rostova (Investor)',
-    email: 'elena.investor@example.com',
-    locale: 'en',
-  },
-};
+const DEV_FALLBACK_SECRET = 'makanreel-local-dev-ephemeral-signing-key-do-not-use-in-prod';
+const PLACEHOLDER_SECRET = 'replace-with-32-byte-random-secret-in-production';
 
-function getSessionSecret(): string {
-  return (
-    process.env.SESSION_SECRET ||
-    'makanreel-local-dev-ephemeral-signing-key-do-not-use-in-prod'
-  );
+/**
+ * Returns the cookie-signing secret, or null when sessions cannot be issued safely.
+ * In production a real SESSION_SECRET (32+ chars, not the example placeholder) is required;
+ * without one, nobody can sign in and every request is treated as a guest (fail closed).
+ */
+export function getSessionSecret(): string | null {
+  const secret = process.env.SESSION_SECRET?.trim();
+  if (secret && secret.length >= 32 && secret !== PLACEHOLDER_SECRET) return secret;
+  if (process.env.NODE_ENV === 'production') return null;
+  return DEV_FALLBACK_SECRET;
 }
 
-export function signSessionToken(role: UserRole): string {
-  const payload = JSON.stringify({ role, iat: Date.now() });
-  const encoded = Buffer.from(payload, 'utf8').toString('base64url');
-  const sig = crypto
-    .createHmac('sha256', getSessionSecret())
-    .update(encoded)
-    .digest('base64url');
-  return `${encoded}.${sig}`;
+export interface SessionClaims {
+  uid: string;
+  sv: number;
+  iat: number;
+  exp: number;
 }
 
-export function verifySessionToken(token: string | undefined): UserRole | null {
-  if (!token || !token.includes('.')) return null;
-  const [encoded, sig] = token.split('.');
-  if (!encoded || !sig) return null;
-  const expected = crypto
-    .createHmac('sha256', getSessionSecret())
-    .update(encoded)
-    .digest('base64url');
+function hmac(secret: string, data: string): string {
+  return crypto.createHmac('sha256', secret).update(data).digest('base64url');
+}
+
+export function signSessionToken(
+  userId: string,
+  sessionVersion: number,
+  nowMs = Date.now()
+): string {
+  const secret = getSessionSecret();
+  if (!secret) throw new Error('SESSION_SECRET is not configured');
+  const iat = Math.floor(nowMs / 1000);
+  const claims: SessionClaims = { uid: userId, sv: sessionVersion, iat, exp: iat + SESSION_TTL_SEC };
+  const encoded = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
+  return `${encoded}.${hmac(secret, encoded)}`;
+}
+
+export function verifySessionToken(
+  token: string | undefined,
+  nowMs = Date.now()
+): SessionClaims | null {
+  const secret = getSessionSecret();
+  if (!secret || !token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  const [encoded, sig] = parts;
   const sigBuf = Buffer.from(sig);
-  const expBuf = Buffer.from(expected);
+  const expBuf = Buffer.from(hmac(secret, encoded));
   if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
     return null;
   }
   try {
-    const parsed = JSON.parse(
-      Buffer.from(encoded, 'base64url').toString('utf8')
-    ) as { role?: UserRole };
-    if (parsed.role && parsed.role in DEMO_USERS) {
-      return parsed.role;
+    const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Partial<SessionClaims>;
+    if (
+      typeof parsed.uid !== 'string' ||
+      typeof parsed.sv !== 'number' ||
+      typeof parsed.iat !== 'number' ||
+      typeof parsed.exp !== 'number'
+    ) {
+      return null;
     }
-    return null;
+    if (Math.floor(nowMs / 1000) >= parsed.exp) return null;
+    return parsed as SessionClaims;
   } catch {
     return null;
   }
 }
 
-export function getDemoUser(role: UserRole): SessionUser {
-  return DEMO_USERS[role];
+/**
+ * Resolve a session token to the live user record. The role always comes from the
+ * user store, never from the cookie, so role changes and account disabling apply
+ * on the next request.
+ */
+export function resolveSessionUser(token: string | undefined): SessionUser | null {
+  const claims = verifySessionToken(token);
+  if (!claims) return null;
+  const record = getUserById(claims.uid);
+  if (!record || record.disabled || record.sessionVersion !== claims.sv) return null;
+  return toSessionUser(record);
 }
 
-export async function getCurrentSessionUser(): Promise<SessionUser> {
+/** The signed-in user, or null for guests. */
+export async function getCurrentSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
-  const raw = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const verifiedRole = verifySessionToken(raw);
-  // Default to verified_agent in zero-key local mode so mobile capture & live sync work immediately
-  return DEMO_USERS[verifiedRole ?? 'verified_agent'];
+  return resolveSessionUser(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+}
+
+export const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+  maxAge: SESSION_TTL_SEC,
+};
+
+/** Only allow same-site relative redirect targets (blocks //evil.com and absolute URLs). */
+export function safeRedirectPath(raw: string | null | undefined, fallback = '/'): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return fallback;
+  }
+  return raw;
 }
 
 // Strict Server-Side RBAC Policy Functions
@@ -136,4 +134,8 @@ export function canViewDashboard(role: UserRole): boolean {
 
 export function canViewAuditLogs(role: UserRole): boolean {
   return ['admin', 'manager'].includes(role);
+}
+
+export function canManageUsers(role: UserRole): boolean {
+  return role === 'admin';
 }

@@ -13,7 +13,7 @@ Mobile-first PWA and live-synced web portal built for agents, developers, sales 
 - **Web Discovery Portal, Detail Dossier & Investor Presentation Mode:**
   - Left filter rail, Grid / Split / Clustered MapLibre GL JS Map toggle (with Arabic RTL map text plugin), sticky quick-detail drawer, adaptive HLS/MP4 video player with EN/AR WebVTT captions, WhatsApp deep-link CTA, watch-time-attributed enquiry form, vertical Reels feed (`/reels`), and distraction-free fullscreen **Investor Presentation Mode** (`/present/[slug]`) with live unit/plot availability matrix.
 - **Agent & Admin Operations Dashboard (`/dashboard`):**
-  - Server-side HMAC-signed session cookies + strict RBAC (`admin`, `manager`, `verified_agent`, `agent`, `viewer`), Moderation Queue, per-listing video analytics, immutable Audit Log, and **UAE PDPL / GDPR data export & erasure**.
+  - Email + password sign-in (`/login`, scrypt-hashed passwords, rate-limited), HMAC-signed 12-hour session cookies, and strict server-side RBAC (`admin`, `manager`, `verified_agent`, `agent`, `viewer`). Roles are read from the user record on every request, never from the cookie. Admins manage accounts and roles in the **Team & Access** tab. Plus Moderation Queue, per-listing video analytics, immutable Audit Log, and **UAE PDPL / GDPR data export & erasure** for signed-in users.
 - **Full Bilingual English & Arabic (RTL):**
   - `next-intl` route localization (`/en`, `/ar`), `<html dir="rtl">`, `Plus Jakarta Sans` + `IBM Plex Sans Arabic` + `JetBrains Mono`, CSS logical properties, locale-aware currency/date formatting, and bidi isolation for permit numbers and coordinates.
 
@@ -25,6 +25,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000/en` (English LTR) or `http://localhost:3000/ar` (Arabic RTL).
+
+Sign in at `http://localhost:3000/en/login`. In development, five demo accounts are seeded (one per role): `tariq@makanreel.ae` (admin), `nadia@makanreel.ae` (manager), `layla@makanreel.ae` (verified agent), `omar@makanreel.ae` (agent) and `elena.investor@example.com` (viewer), all with the password `makanreel-demo-2026` (override with `DEMO_ACCOUNT_PASSWORD`). Visitors who are not signed in browse as guests and cannot upload, moderate or open the dashboard.
 
 In default `local` mode, uploaded videos persist under `.data/uploads/`, metadata persists in `.data/db.json`, and live sync runs via `/api/events` (SSE) + `BroadcastChannel` with zero external credentials required.
 
@@ -44,7 +46,8 @@ Copy `.env.example` to `.env.local` and configure:
 | Variable | Purpose |
 |---|---|
 | `NEXT_PUBLIC_APP_MODE` | `local` (default zero-key mode) or `supabase` |
-| `SESSION_SECRET` | 32+ byte random secret for signing HTTP-only session cookies |
+| `SESSION_SECRET` | 32+ char random secret for signing HTTP-only session cookies. Required in production; sign-in is disabled without it |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_NAME` | Creates the first admin account at startup (production has no demo accounts) |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | PostgreSQL + PostGIS + Auth + Realtime |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_API_TOKEN`, `CLOUDFLARE_STREAM_WEBHOOK_SECRET` | Cloudflare Stream Direct Creator TUS Upload, ABR HLS transcoding & webhook verification |
 | `NEXT_PUBLIC_MAP_STYLE_LIGHT`, `NEXT_PUBLIC_MAP_STYLE_DARK` | MapLibre GL vector styles (defaults to OpenFreeMap Positron & Dark) |
@@ -61,6 +64,7 @@ Apply `supabase/migrations/0001_initial.sql` via Supabase CLI (`supabase db push
 4. Deploy (`npm run build`).
 
 ## Known Limits
+- **Local Account Store:** User accounts live in the same local JSON store as listings. On Vercel that store is per-instance temporary storage, so accounts other than the bootstrap admin do not survive cold starts. Move accounts to a persistent database (e.g. Supabase Auth) before relying on them in production.
 - **Local Mode Storage:** Local JSON store and `.data/uploads` are single-instance dev/demo adapters — switch to Supabase + Cloudflare Stream (`NEXT_PUBLIC_APP_MODE=supabase`) before multi-instance production deployment.
 - **Client-Side Video Compression:** Browsers cap bitrate during `MediaRecorder` capture (4.5 Mbps) rather than running heavy WASM FFmpeg on mobile Safari (which risks OOM crashes); full multi-bitrate HLS ladders are handled server-side by Cloudflare Stream in production.
 - **Seeded Demo Videos:** Pre-seeded properties use architectural showcase posters until real walkthrough clips are uploaded via `/capture` (uploaded clips stream real bytes via HTTP `206 Partial Content`).

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import type { CurrencyCode, SessionUser, UserRole } from '@/types/domain';
+import type { CurrencyCode, SessionUser } from '@/types/domain';
 
 interface AppContextValue {
   theme: 'light' | 'dark';
@@ -9,7 +9,8 @@ interface AppContextValue {
   currency: CurrencyCode;
   setCurrency: (c: CurrencyCode) => void;
   user: SessionUser | null;
-  switchRole: (role: UserRole) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ ok: boolean; status: number }>;
+  signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
 
@@ -20,7 +21,7 @@ export function AppProvider({
   initialUser,
 }: {
   children: React.ReactNode;
-  initialUser: SessionUser;
+  initialUser: SessionUser | null;
 }) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [currency, setCurrencyState] = useState<CurrencyCode>('AED');
@@ -67,15 +68,24 @@ export function AppProvider({
     }
   }, []);
 
-  const switchRole = useCallback(async (role: UserRole) => {
-    const res = await fetch('/api/auth/session', {
+  const signIn = useCallback(async (email: string, password: string) => {
+    const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role }),
+      body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
       const data = (await res.json()) as { user: SessionUser };
       setUser(data.user);
+    }
+    return { ok: res.ok, status: res.status };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      setUser(null);
     }
   }, []);
 
@@ -87,7 +97,8 @@ export function AppProvider({
         currency,
         setCurrency,
         user,
-        switchRole,
+        signIn,
+        signOut,
         refreshSession,
       }}
     >

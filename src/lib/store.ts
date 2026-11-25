@@ -11,6 +11,8 @@ import {
 } from './seed-data';
 import { slugify, toAed } from './format';
 import { realtimeBroker } from './realtime-broker';
+import { DEFAULT_DEMO_PASSWORD, DEMO_PROFILES } from './demo-accounts';
+import { hashPassword } from './password';
 import type {
   AuditLog,
   Enquiry,
@@ -22,6 +24,7 @@ import type {
   PropertyVideo,
   PropertyWithVideos,
   SessionUser,
+  UserRole,
   VideoUploadStatus,
 } from '@/types/domain';
 import type { CreateEnquiryInput, CreatePropertyInput } from './validation';
@@ -41,7 +44,18 @@ export interface TusSessionRecord {
   createdAt: string;
 }
 
+export interface UserRecord extends SessionUser {
+  passwordHash: string;
+  /** Bumped to revoke every outstanding session cookie for this user. */
+  sessionVersion: number;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+}
+
 interface LocalDatabase {
+  users: UserRecord[];
   properties: Property[];
   videos: PropertyVideo[];
   enquiries: Enquiry[];
@@ -61,14 +75,70 @@ function ensureDirs(): void {
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+let demoHashCache: { password: string; hash: string } | null = null;
+
+/**
+ * Seed login accounts:
+ *  - Demo accounts (one per role) only outside production.
+ *  - A bootstrap admin from BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD (any env).
+ * Returns true when users were added.
+ */
+function seedUsers(db: LocalDatabase): boolean {
+  let changed = false;
+  const now = new Date().toISOString();
+
+  if (process.env.NODE_ENV !== 'production') {
+    const demoPassword = process.env.DEMO_ACCOUNT_PASSWORD || DEFAULT_DEMO_PASSWORD;
+    if (!demoHashCache || demoHashCache.password !== demoPassword) {
+      demoHashCache = { password: demoPassword, hash: hashPassword(demoPassword) };
+    }
+    for (const profile of Object.values(DEMO_PROFILES)) {
+      if (db.users.some((u) => u.id === profile.id || u.email === profile.email)) continue;
+      db.users.push({
+        ...structuredClone(profile),
+        passwordHash: demoHashCache.hash,
+        sessionVersion: 1,
+        disabled: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      changed = true;
+    }
+  }
+
+  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (bootstrapEmail && bootstrapPassword && bootstrapPassword.length >= 10) {
+    if (!db.users.some((u) => u.email === bootstrapEmail)) {
+      db.users.push({
+        id: `usr-${crypto.randomUUID()}`,
+        role: 'admin',
+        fullName: process.env.BOOTSTRAP_ADMIN_NAME?.trim() || 'Platform Administrator',
+        email: bootstrapEmail,
+        locale: 'en',
+        passwordHash: hashPassword(bootstrapPassword),
+        sessionVersion: 1,
+        disabled: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function createInitialDb(): LocalDatabase {
-  return {
+  const db: LocalDatabase = {
+    users: [],
     properties: structuredClone(SEED_PROPERTIES),
     videos: structuredClone(SEED_VIDEOS),
     enquiries: structuredClone(SEED_ENQUIRIES),
     auditLogs: structuredClone(SEED_AUDIT_LOGS),
     tusSessions: {},
   };
+  seedUsers(db);
+  return db;
 }
 
 const globalForDb = globalThis as unknown as {
@@ -83,6 +153,9 @@ function loadDb(): LocalDatabase {
       const raw = fs.readFileSync(DB_FILE, 'utf8');
       const parsed = JSON.parse(raw) as LocalDatabase;
       if (Array.isArray(parsed.properties) && Array.isArray(parsed.videos)) {
+        // Backward-compatible upgrade of stores created before user accounts existed
+        if (!Array.isArray(parsed.users)) parsed.users = [];
+        if (seedUsers(parsed)) persistDb(parsed);
         globalForDb.__makanreelDb = parsed;
         return parsed;
       }
@@ -457,6 +530,11 @@ export function getTusSession(tusId: string): TusSessionRecord | null {
   return db.tusSessions[tusId] ?? null;
 }
 
+export function getVideoById(videoId: string): PropertyVideo | null {
+  const db = loadDb();
+  return db.videos.find((v) => v.id === videoId) ?? null;
+}
+
 export function getVideoByAssetId(assetId: string): PropertyVideo | null {
   const db = loadDb();
   return db.videos.find((v) => v.providerAssetId === assetId) ?? null;
@@ -790,4 +868,148 @@ export function eraseUserData(actor: SessionUser): {
   });
 
   return { erasedEnquiries, erasedReceiptId: log.id };
+}
+
+// ---------------------------------------------------------------------------
+// User accounts (local-mode credential store)
+// ---------------------------------------------------------------------------
+
+export function toSessionUser(record: UserRecord): SessionUser {
+  return {
+    id: record.id,
+    role: record.role,
+    fullName: record.fullName,
+    email: record.email,
+    orgName: record.orgName,
+    orn: record.orn,
+    brn: record.brn,
+    whatsappNumber: record.whatsappNumber,
+    locale: record.locale,
+  };
+}
+
+export type PublicUserRecord = SessionUser & {
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+};
+
+function toPublicUser(record: UserRecord): PublicUserRecord {
+  return {
+    ...toSessionUser(record),
+    disabled: record.disabled,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    lastLoginAt: record.lastLoginAt,
+  };
+}
+
+export function findUserByEmail(email: string): UserRecord | null {
+  const db = loadDb();
+  const normalized = email.trim().toLowerCase();
+  return db.users.find((u) => u.email.toLowerCase() === normalized) ?? null;
+}
+
+export function getUserById(id: string): UserRecord | null {
+  const db = loadDb();
+  return db.users.find((u) => u.id === id) ?? null;
+}
+
+export function listUsers(): PublicUserRecord[] {
+  const db = loadDb();
+  return db.users
+    .map(toPublicUser)
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+}
+
+export function recordUserLogin(id: string): void {
+  const db = loadDb();
+  const user = db.users.find((u) => u.id === id);
+  if (!user) return;
+  user.lastLoginAt = new Date().toISOString();
+  persistDb(db);
+}
+
+export function createUserAccount(
+  input: {
+    email: string;
+    password: string;
+    fullName: string;
+    role: UserRole;
+    orgName?: string;
+    orn?: string;
+    brn?: string;
+    whatsappNumber?: string;
+    locale?: 'en' | 'ar';
+  },
+  actor: SessionUser
+): { ok: true; user: PublicUserRecord } | { ok: false; code: 'EMAIL_TAKEN' } {
+  const db = loadDb();
+  const email = input.email.trim().toLowerCase();
+  if (db.users.some((u) => u.email.toLowerCase() === email)) {
+    return { ok: false, code: 'EMAIL_TAKEN' };
+  }
+  const now = new Date().toISOString();
+  const record: UserRecord = {
+    id: `usr-${crypto.randomUUID()}`,
+    role: input.role,
+    fullName: input.fullName.trim(),
+    email,
+    orgName: input.orgName,
+    orn: input.orn,
+    brn: input.brn,
+    whatsappNumber: input.whatsappNumber,
+    locale: input.locale ?? 'en',
+    passwordHash: hashPassword(input.password),
+    sessionVersion: 1,
+    disabled: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.users.push(record);
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: 'user.created',
+    entityType: 'user_account',
+    entityId: record.id,
+    metadata: { role: record.role },
+  });
+  return { ok: true, user: toPublicUser(record) };
+}
+
+export function updateUserAccess(
+  id: string,
+  changes: { role?: UserRole; disabled?: boolean },
+  actor: SessionUser
+): PublicUserRecord | null {
+  const db = loadDb();
+  const user = db.users.find((u) => u.id === id);
+  if (!user) return null;
+  const before = { role: user.role, disabled: user.disabled };
+
+  if (changes.role !== undefined) user.role = changes.role;
+  if (changes.disabled !== undefined) user.disabled = changes.disabled;
+  // Any access change revokes the user's existing sessions
+  if (before.role !== user.role || before.disabled !== user.disabled) {
+    user.sessionVersion += 1;
+  }
+  user.updatedAt = new Date().toISOString();
+  persistDb(db);
+
+  appendAuditLog({
+    actor,
+    action: 'user.access.updated',
+    entityType: 'user_account',
+    entityId: user.id,
+    metadata: { before, after: { role: user.role, disabled: user.disabled } },
+  });
+  return toPublicUser(user);
+}
+
+export function countActiveAdmins(): number {
+  const db = loadDb();
+  return db.users.filter((u) => u.role === 'admin' && !u.disabled).length;
 }

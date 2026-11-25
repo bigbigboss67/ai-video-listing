@@ -61,3 +61,7 @@ export function checkRateLimit(
     resetAt: now + windowMs,
   };
 }
+
+export function unauthenticatedError(): NextResponse<ApiErrorEnvelope> {
+  return apiError(401, 'UNAUTHENTICATED', 'Sign in is required for this action.');
+}

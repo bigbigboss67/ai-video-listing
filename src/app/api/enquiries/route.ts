@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getCurrentSessionUser } from '@/lib/auth';
 import { apiError, checkRateLimit, zodApiError } from '@/lib/api-error';
+import { getClientIpFromHeaders } from '@/lib/anti-scraper';
 import { createEnquiry } from '@/lib/store';
 import { createEnquirySchema } from '@/lib/validation';
 
 export async function POST(request: Request) {
+  // Guests may enquire; rate-limit by account when signed in, otherwise by client IP
   const user = await getCurrentSessionUser();
-  const rl = checkRateLimit(`enquiry:${user.id}`, 15, 60_000);
+  const rlKey = user ? `enquiry:user:${user.id}` : `enquiry:ip:${getClientIpFromHeaders(request.headers)}`;
+  const rl = checkRateLimit(rlKey, 15, 60_000);
   if (!rl.allowed) {
     return apiError(429, 'RATE_LIMITED', 'Too many enquiries submitted. Please wait.');
   }
@@ -23,7 +26,7 @@ export async function POST(request: Request) {
     return zodApiError(parsed.error);
   }
 
-  const enquiry = createEnquiry(parsed.data, user);
+  const enquiry = createEnquiry(parsed.data, user ?? undefined);
   if (!enquiry) {
     return apiError(404, 'PROPERTY_NOT_FOUND', 'Property not found.');
   }

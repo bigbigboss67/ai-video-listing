@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from './password';
 
 export const ALLOWED_VIDEO_MIMES = [
   'video/mp4',
@@ -113,9 +114,39 @@ export const createEnquirySchema = z.object({
   message: z.string().trim().max(1500).optional(),
 });
 
-export const switchRoleSchema = z.object({
-  role: z.enum(['admin', 'manager', 'verified_agent', 'agent', 'viewer']),
+export const userRoleSchema = z.enum(['admin', 'manager', 'verified_agent', 'agent', 'viewer']);
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Valid email address is required').max(254),
+  password: z.string().min(1, 'Password is required').max(MAX_PASSWORD_LENGTH),
 });
+
+export const createUserSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email('Valid email address is required').max(254),
+    password: z
+      .string()
+      .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
+      .max(MAX_PASSWORD_LENGTH),
+    fullName: z.string().trim().min(2, 'Full name is required').max(120),
+    role: userRoleSchema,
+    orgName: z.string().trim().max(160).optional(),
+    orn: z.string().trim().max(40).optional(),
+    brn: z.string().trim().max(40).optional(),
+    whatsappNumber: z.string().trim().max(30).optional(),
+    locale: z.enum(['en', 'ar']).default('en'),
+  })
+  .strict();
+
+export const updateUserAccessSchema = z
+  .object({
+    role: userRoleSchema.optional(),
+    disabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => v.role !== undefined || v.disabled !== undefined, {
+    message: 'Provide role and/or disabled',
+  });
 
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>;
 export type InitiateUploadInput = z.infer<typeof initiateUploadSchema>;

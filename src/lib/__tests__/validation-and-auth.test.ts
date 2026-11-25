@@ -96,11 +96,13 @@ describe('UAE Compliance & Input Validation Schemas', () => {
 });
 
 describe('Server-Side Session Signing & RBAC Enforcement', () => {
-  it('signs and verifies HMAC session tokens and rejects tampering', () => {
-    const token = signSessionToken('admin');
-    expect(verifySessionToken(token)).toBe('admin');
+  it('signs and verifies HMAC session tokens and rejects tampering and expiry', () => {
+    const token = signSessionToken('usr-admin-01', 1);
+    expect(verifySessionToken(token)?.uid).toBe('usr-admin-01');
     expect(verifySessionToken(`${token}tampered`)).toBeNull();
     expect(verifySessionToken('invalid-token')).toBeNull();
+    // Expired after 12h TTL
+    expect(verifySessionToken(token, Date.now() + 13 * 60 * 60 * 1000)).toBeNull();
   });
 
   it('enforces least-privilege RBAC across roles', () => {
