@@ -32,6 +32,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // The reels feed fills the viewport, so it keeps the bottom-nav padding and skips the footer.
+  const isFullBleed = pathname.startsWith('/reels');
   const nextLocale = locale === 'en' ? 'ar' : 'en';
 
   const handleLocaleSwitch = () => {
@@ -183,7 +185,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 pb-20 lg:pb-0">{children}</main>
+      <main className={`flex-1 ${isFullBleed ? 'pb-20 lg:pb-0' : ''}`}>{children}</main>
+      {/* Site footer with legal links (extra bottom padding clears the mobile nav) */}
+      {isFullBleed ? null : (
+        <footer className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] pb-20 lg:pb-0">
+          <div className="max-w-[1600px] mx-auto px-3 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-[var(--text-muted)]">
+            <span>
+              © {new Date().getFullYear()} {t('brand.name')}. {t('legal.footerRights')}
+            </span>
+            <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-1">
+              <Link href="/legal/privacy" className="hover:text-[var(--text-primary)] hover:underline">
+                {t('legal.footerPrivacy')}
+              </Link>
+              <Link href="/legal/terms" className="hover:text-[var(--text-primary)] hover:underline">
+                {t('legal.footerTerms')}
+              </Link>
+              <Link href="/legal/cookies" className="hover:text-[var(--text-primary)] hover:underline">
+                {t('legal.footerCookies')}
+              </Link>
+            </nav>
+          </div>
+        </footer>
+      )}
 
       {/* Mobile Thumb-Reachable Bottom Navigation */}
       <nav

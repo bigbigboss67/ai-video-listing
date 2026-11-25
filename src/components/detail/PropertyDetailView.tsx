@@ -49,6 +49,8 @@ export function PropertyDetailView({
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [enquirySuccess, setEnquirySuccess] = useState(false);
   const [enquiryError, setEnquiryError] = useState<string | null>(null);
@@ -80,8 +82,12 @@ export function PropertyDetailView({
 
   const handleSubmitEnquiry = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
     setEnquiryError(null);
+    if (!privacyConsent) {
+      setEnquiryError(t('enquiry.consentRequired'));
+      return;
+    }
+    setSubmitting(true);
     try {
       const res = await fetch('/api/enquiries', {
         method: 'POST',
@@ -95,6 +101,8 @@ export function PropertyDetailView({
           channel: 'form',
           watchTimeSec: watchSec,
           message,
+          privacyConsent,
+          marketingOptIn,
         }),
       });
       const data = await res.json();
@@ -107,6 +115,10 @@ export function PropertyDetailView({
       setEmail('');
       setPhone('');
       setMessage('');
+      setPrivacyConsent(false);
+      setMarketingOptIn(false);
+    } catch {
+      setEnquiryError(t('enquiry.networkError'));
     } finally {
       setSubmitting(false);
     }
@@ -448,6 +460,48 @@ export function PropertyDetailView({
                     aria-label={t('enquiry.message')}
                     className="w-full p-3 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-sm"
                   />
+                  {/* Just-in-time privacy notice (UAE PDPL) — full text at /legal/privacy */}
+                  <p
+                    id="enquiry-privacy-notice"
+                    className="text-[11px] leading-relaxed text-[var(--text-muted)]"
+                  >
+                    {t('enquiry.privacyNotice')}
+                  </p>
+                  <label className="flex items-start gap-2 text-xs leading-snug text-[var(--text-secondary)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      required
+                      checked={privacyConsent}
+                      onChange={(e) => setPrivacyConsent(e.target.checked)}
+                      aria-describedby="enquiry-privacy-notice"
+                      data-testid="enquiry-privacy-consent"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent-primary)]"
+                    />
+                    <span>
+                      {t.rich('enquiry.consentLabel', {
+                        link: (chunks) => (
+                          <Link
+                            href="/legal/privacy"
+                            target="_blank"
+                            rel="noopener"
+                            className="underline font-medium text-[var(--accent-primary)]"
+                          >
+                            {chunks}
+                          </Link>
+                        ),
+                      })}
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-xs leading-snug text-[var(--text-secondary)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={marketingOptIn}
+                      onChange={(e) => setMarketingOptIn(e.target.checked)}
+                      data-testid="enquiry-marketing-opt-in"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent-primary)]"
+                    />
+                    <span>{t('enquiry.marketingLabel')}</span>
+                  </label>
                   {enquiryError ? (
                     <div role="alert" className="text-xs text-[var(--status-danger)]">
                       {enquiryError}
