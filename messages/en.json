@@ -169,7 +169,12 @@
     "phone": "Phone / WhatsApp",
     "message": "Investment criteria or preferred viewing time",
     "submit": "Send Priority Enquiry",
-    "success": "Enquiry logged with video watch-time attribution. An advisor will respond shortly."
+    "success": "Enquiry logged with video watch-time attribution. An advisor will respond shortly.",
+    "privacyNotice": "MakanReel will store your name, email, phone, message and which listing video you watched, and share them with the licensed agent or brokerage for this property so they can answer you. We keep enquiries for up to 24 months unless the law requires longer. You can ask us to access, correct or delete your data at any time.",
+    "consentLabel": "I have read the <link>Privacy Notice</link> and agree to my details being stored and shared with the listing agent to answer this enquiry.",
+    "marketingLabel": "Optional: send me similar listings and market updates by email or WhatsApp. I can unsubscribe at any time.",
+    "consentRequired": "Please tick the privacy box to send your enquiry.",
+    "networkError": "Could not reach the server. Please check your connection and try again."
   },
   "presentation": {
     "title": "Investor Presentation Mode",
@@ -243,5 +248,17 @@
     "step3": "25–38s · Show kitchen, stone & appliance finishes",
     "step4": "38–50s · Primary suite & unobstructed view",
     "step5": "50–60s · Balcony / amenities & permit recap"
+  },
+  "legal": {
+    "footerPrivacy": "Privacy Notice",
+    "footerTerms": "Terms of Use",
+    "footerCookies": "Cookie Policy",
+    "footerRights": "All rights reserved.",
+    "draftBanner": "Draft for review. This page has not yet been approved by a UAE-qualified lawyer and is not final legal advice or a binding policy.",
+    "reviewNote": "Lawyer review",
+    "lastUpdated": "Last updated",
+    "version": "Version",
+    "contents": "On this page",
+    "otherDocs": "Related documents"
   }
 }

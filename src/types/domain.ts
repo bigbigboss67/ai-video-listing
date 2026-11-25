@@ -149,6 +149,12 @@ export interface Enquiry {
   channel: 'form' | 'whatsapp';
   watchTimeSec: number;
   message?: string;
+  /** Server time when the enquirer ticked the privacy consent box. Absent on records created before consent capture existed. */
+  privacyConsentAt?: string;
+  /** Version of the privacy notice the enquirer was shown (see PRIVACY_NOTICE_VERSION). */
+  privacyNoticeVersion?: string;
+  /** Separate, optional opt-in to marketing messages. */
+  marketingOptIn?: boolean;
   createdAt: string;
 }
 

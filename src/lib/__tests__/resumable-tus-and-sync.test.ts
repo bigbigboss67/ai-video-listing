@@ -13,6 +13,7 @@ import {
 import { getDemoUser } from '@/lib/auth';
 import { realtimeBroker } from '@/lib/realtime-broker';
 import type { RealtimeEvent } from '@/types/domain';
+import { PRIVACY_NOTICE_VERSION } from '@/lib/legal';
 
 describe('Resumable TUS Upload, Live Sync & PDPL Regression Suite', () => {
   beforeEach(() => {
@@ -116,10 +117,16 @@ describe('Resumable TUS Upload, Live Sync & PDPL Regression Suite', () => {
         channel: 'form',
         watchTimeSec: 42,
         message: 'Private viewing request',
+        privacyConsent: true,
+        marketingOptIn: false,
       },
       viewer
     );
     expect(enq).not.toBeNull();
+    // Consent evidence is stamped server-side with the notice version shown.
+    expect(enq?.privacyConsentAt).toBeTruthy();
+    expect(enq?.privacyNoticeVersion).toBe(PRIVACY_NOTICE_VERSION);
+    expect(enq?.marketingOptIn).toBe(false);
 
     const exported = exportUserData(viewer);
     expect(exported.enquiries.length).toBeGreaterThanOrEqual(1);

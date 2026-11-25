@@ -111,6 +111,15 @@ export const createEnquirySchema = z.object({
   channel: z.enum(['form', 'whatsapp']).default('form'),
   watchTimeSec: z.coerce.number().int().min(0).max(36000).default(0),
   message: z.string().trim().max(1500).optional(),
+  // UAE PDPL: the enquirer must actively acknowledge the privacy notice before
+  // we store and share their contact details. Must be literally `true`.
+  privacyConsent: z.literal(true, {
+    errorMap: () => ({
+      message: 'Please confirm you have read the Privacy Notice and agree to us sharing your details to answer this enquiry.',
+    }),
+  }),
+  // Optional and unbundled from the enquiry: marketing contact needs its own opt-in.
+  marketingOptIn: z.boolean().default(false),
 });
 
 export const switchRoleSchema = z.object({

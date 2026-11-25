@@ -11,6 +11,7 @@ import {
 } from './seed-data';
 import { slugify, toAed } from './format';
 import { realtimeBroker } from './realtime-broker';
+import { PRIVACY_NOTICE_VERSION } from './legal';
 import type {
   AuditLog,
   Enquiry,
@@ -671,6 +672,10 @@ export function createEnquiry(
     channel: input.channel,
     watchTimeSec: input.watchTimeSec,
     message: input.message,
+    // Consent is recorded with server time, never a client-supplied timestamp.
+    privacyConsentAt: now,
+    privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
+    marketingOptIn: input.marketingOptIn,
     createdAt: now,
   };
 
