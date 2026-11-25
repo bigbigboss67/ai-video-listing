@@ -28,6 +28,7 @@ import type {
   PropertyWithVideos,
 } from '@/types/domain';
 import { useAppContext } from '@/components/providers/AppProvider';
+import { getMissingBrokerFields } from '@/lib/broker';
 import { broadcastLocalSyncEvent } from '@/hooks/useRealtimeSync';
 import {
   ResumableTusRunner,
@@ -58,7 +59,9 @@ export function CaptureStudio({
 }) {
   const t = useTranslations();
   const locale = useLocale();
-  const { theme } = useAppContext();
+  const { theme, user } = useAppContext();
+  const missingBrokerFields = user ? getMissingBrokerFields(user) : [];
+  const brokerDetailsMissing = missingBrokerFields.length > 0;
 
   // Capture vs Gallery tab
   const [mode, setMode] = useState<'record' | 'gallery'>('record');
@@ -105,21 +108,23 @@ export function CaptureStudio({
   const [qcTitleEn, setQcTitleEn] = useState('');
   const [qcTitleAr, setQcTitleAr] = useState('');
   const [qcType, setQcType] = useState<PropertyType>('apartment');
-  const [qcPrice, setQcPrice] = useState('4250000');
+  // No sample values: every field starts blank so nothing fake can be published by accident.
+  const [qcPrice, setQcPrice] = useState('');
   const [qcCurrency, setQcCurrency] = useState<CurrencyCode>('AED');
-  const [qcBeds, setQcBeds] = useState('2');
-  const [qcBaths, setQcBaths] = useState('3');
-  const [qcArea, setQcArea] = useState('1650');
+  const [qcBeds, setQcBeds] = useState('');
+  const [qcBaths, setQcBaths] = useState('');
+  const [qcArea, setQcArea] = useState('');
   const [qcStatus, setQcStatus] = useState<PropertyStatus>('ready');
   const [qcOwnership, setQcOwnership] = useState<'freehold' | 'leasehold' | 'gcc_national'>('freehold');
   const [qcAvailability, setQcAvailability] = useState<'available' | 'under_offer' | 'coming_soon' | 'sold'>('available');
-  const [qcPermit, setQcPermit] = useState('7188429011');
+  const [qcPermit, setQcPermit] = useState('');
   const [qcDeveloper, setQcDeveloper] = useState('');
   const [qcProjectNumber, setQcProjectNumber] = useState('');
   const [qcEscrow, setQcEscrow] = useState('');
-  const [qcDescription, setQcDescription] = useState(
-    'Verified architectural walkthrough captured on-site with natural lighting and full layout coverage.'
-  );
+  const [qcDescription, setQcDescription] = useState('');
+  const [qcNetYield, setQcNetYield] = useState('');
+  const [qcServiceCharge, setQcServiceCharge] = useState('');
+  const [qcPaymentPlan, setQcPaymentPlan] = useState('');
   const [creatingProperty, setCreatingProperty] = useState(false);
 
   // Compliance & Upload runner state
@@ -340,6 +345,9 @@ export function CaptureStudio({
           developerName: qcDeveloper || undefined,
           projectNumber: qcProjectNumber || undefined,
           escrowAccount: qcEscrow || undefined,
+          estNetYieldPct: qcNetYield.trim() ? Number(qcNetYield) : undefined,
+          serviceChargeAedSqft: qcServiceCharge.trim() ? Number(qcServiceCharge) : undefined,
+          paymentPlan: qcPaymentPlan.trim() || undefined,
           descriptionEn: qcDescription,
           descriptionAr: qcDescription,
           addressEn,
@@ -363,6 +371,9 @@ export function CaptureStudio({
       setQuickCreateOpen(false);
       setQcTitleEn('');
       setQcTitleAr('');
+      setQcNetYield('');
+      setQcServiceCharge('');
+      setQcPaymentPlan('');
     } finally {
       setCreatingProperty(false);
     }
@@ -989,6 +1000,7 @@ export function CaptureStudio({
                       {t('quickCreate.beds')}
                     </label>
                     <input
+                      required
                       type="number"
                       min={0}
                       value={qcBeds}
@@ -1001,6 +1013,7 @@ export function CaptureStudio({
                       {t('quickCreate.baths')}
                     </label>
                     <input
+                      required
                       type="number"
                       min={0}
                       value={qcBaths}
@@ -1116,6 +1129,55 @@ export function CaptureStudio({
                   </div>
                 ) : null}
 
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className="block">
+                      <span className="block text-[11px] font-semibold mb-1">
+                        {t('quickCreate.estNetYield')}
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={40}
+                        step={0.1}
+                        value={qcNetYield}
+                        onChange={(e) => setQcNetYield(e.target.value)}
+                        className="w-full h-9 px-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-xs tabular-nums"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[11px] font-semibold mb-1">
+                        {t('quickCreate.serviceCharge')}
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={500}
+                        step={0.5}
+                        value={qcServiceCharge}
+                        onChange={(e) => setQcServiceCharge(e.target.value)}
+                        className="w-full h-9 px-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-xs tabular-nums"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[11px] font-semibold mb-1">
+                        {t('quickCreate.paymentPlan')}
+                      </span>
+                      <input
+                        maxLength={120}
+                        value={qcPaymentPlan}
+                        onChange={(e) => setQcPaymentPlan(e.target.value)}
+                        className="w-full h-9 px-2 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-xs"
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    {t('quickCreate.optionalHint')}
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-semibold mb-1">
                     {t('quickCreate.description')} *
@@ -1129,11 +1191,28 @@ export function CaptureStudio({
                   />
                 </div>
 
+                {brokerDetailsMissing ? (
+                  <div
+                    role="alert"
+                    data-testid="broker-details-missing"
+                    className="p-3 rounded-[6px] bg-[var(--status-warn-bg)] text-[var(--status-warn)] text-xs space-y-1"
+                  >
+                    <div className="font-semibold">{t('quickCreate.brokerMissingTitle')}</div>
+                    <div>
+                      {t('quickCreate.brokerMissingBody', {
+                        fields: missingBrokerFields
+                          .map((f) => t(`quickCreate.brokerFields.${f}`))
+                          .join(', '),
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
                 <Button
                   type="submit"
                   variant="primary"
                   size="sm"
-                  disabled={creatingProperty}
+                  disabled={creatingProperty || brokerDetailsMissing}
                   className="w-full"
                 >
                   {creatingProperty ? 'Creating…' : 'Save & Attach Property'}

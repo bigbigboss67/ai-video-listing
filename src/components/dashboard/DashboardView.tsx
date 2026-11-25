@@ -69,6 +69,7 @@ export function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
+  const [moderationError, setModerationError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -113,8 +114,14 @@ export function DashboardView() {
       }),
     });
     if (res.ok) {
+      setModerationError(null);
       await loadDashboard();
+      return;
     }
+    const json = (await res.json().catch(() => null)) as {
+      error?: { message?: string };
+    } | null;
+    setModerationError(json?.error?.message ?? 'Moderation action failed. Please try again.');
   };
 
   const handlePdplExport = () => {
@@ -356,6 +363,14 @@ export function DashboardView() {
           />
         ) : (
           <div className="space-y-3">
+            {moderationError ? (
+              <p
+                role="alert"
+                className="p-3 rounded-[6px] bg-[var(--status-danger-bg)] text-xs font-medium text-[var(--status-danger)]"
+              >
+                {moderationError}
+              </p>
+            ) : null}
             {pendingVideos.map((v) => (
               <div
                 key={v.id}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { canCreateProperty, canViewDashboard, getCurrentSessionUser } from '@/lib/auth';
 import { apiError, checkRateLimit, zodApiError } from '@/lib/api-error';
+import { BROKER_FIELD_LABELS, BrokerDetailsMissingError, getMissingBrokerFields } from '@/lib/broker';
 import { createProperty, listProperties } from '@/lib/store';
 import { createPropertySchema } from '@/lib/validation';
 import type { PropertyStatus, PropertyType } from '@/types/domain';
@@ -72,6 +73,12 @@ export async function POST(request: Request) {
     );
   }
 
+  // Listings must carry the agent's own ORN, BRN and WhatsApp; the platform never fills these in.
+  const missingBroker = getMissingBrokerFields(user);
+  if (missingBroker.length > 0) {
+    return brokerDetailsError(new BrokerDetailsMissingError(missingBroker, 'create'));
+  }
+
   const rl = checkRateLimit(`prop-create:${user.id}`, 30, 60_000);
   if (!rl.allowed) {
     return apiError(429, 'RATE_LIMITED', 'Too many property creation requests. Please wait.');
@@ -89,6 +96,20 @@ export async function POST(request: Request) {
     return zodApiError(parsed.error);
   }
 
-  const property = createProperty(parsed.data, user);
-  return NextResponse.json({ property }, { status: 201 });
+  try {
+    const property = createProperty(parsed.data, user);
+    return NextResponse.json({ property }, { status: 201 });
+  } catch (err) {
+    if (err instanceof BrokerDetailsMissingError) return brokerDetailsError(err);
+    throw err;
+  }
+}
+
+function brokerDetailsError(err: BrokerDetailsMissingError) {
+  return apiError(
+    422,
+    'BROKER_DETAILS_REQUIRED',
+    err.message,
+    Object.fromEntries(err.missing.map((f) => [f, [`${BROKER_FIELD_LABELS[f]} is required`]]))
+  );
 }

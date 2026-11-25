@@ -13,6 +13,7 @@ import {
 import type { CurrencyCode, PropertyWithVideos } from '@/types/domain';
 import { useAppContext } from '@/components/providers/AppProvider';
 import { formatArea, formatCurrency } from '@/lib/format';
+import { propertyHasBrokerDetails } from '@/lib/broker';
 import { AdaptiveVideoPlayer } from '@/components/video/AdaptiveVideoPlayer';
 import { ClusteredPropertyMap } from '@/components/map/ClusteredPropertyMap';
 import { StatusPill } from '@/components/ui/Primitives';
@@ -165,9 +166,15 @@ export function PresentationView({
               <div className="text-[11px] text-[#7E8899]">
                 {t('listing.estYield')}
               </div>
-              <div className="text-lg font-bold tabular-nums text-[#34D399] mt-0.5">
-                {property.estNetYieldPct ? `${property.estNetYieldPct}%` : '—'}
-              </div>
+              {property.estNetYieldPct != null ? (
+                <div className="text-lg font-bold tabular-nums text-[#34D399] mt-0.5">
+                  {property.estNetYieldPct}%
+                </div>
+              ) : (
+                <div className="text-sm font-medium text-[#7E8899] mt-1">
+                  {t('listing.notProvided')}
+                </div>
+              )}
             </div>
             <div className="p-3.5 rounded-[8px] border border-[#262E3B] bg-[#151920]">
               <div className="text-[11px] text-[#7E8899]">
@@ -234,19 +241,23 @@ export function PresentationView({
             </table>
           </div>
 
-          {property.paymentPlan ? (
-            <div className="p-4 border-t border-[#262E3B] bg-[#12161C] text-xs">
-              <div className="text-[#7E8899] mb-1">{t('listing.paymentPlan')}</div>
+          <div className="p-4 border-t border-[#262E3B] bg-[#12161C] text-xs">
+            <div className="text-[#7E8899] mb-1">{t('listing.paymentPlan')}</div>
+            {property.paymentPlan ? (
               <div className="font-medium text-white">{property.paymentPlan}</div>
-            </div>
-          ) : null}
+            ) : (
+              <div className="font-medium text-[#7E8899]">{t('listing.notProvided')}</div>
+            )}
+          </div>
         </div>
       </div>
 
       <footer className="px-6 py-2.5 border-t border-[#262E3B] text-[11px] text-[#7E8899] flex items-center justify-between">
         <span>{t('presentation.shortcuts')}</span>
         <span>
-          {property.agentOrg} · {property.agentOrn}
+          {propertyHasBrokerDetails(property)
+            ? `${property.agentOrg} · ${property.agentOrn} · ${property.agentBrn}`
+            : t('listing.brokerDetailsMissing')}
         </span>
       </footer>
     </div>

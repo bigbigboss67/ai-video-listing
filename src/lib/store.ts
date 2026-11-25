@@ -9,6 +9,11 @@ import {
   SEED_VIDEOS,
   makeArchitecturalPoster,
 } from './seed-data';
+import {
+  BrokerDetailsMissingError,
+  getMissingBrokerFields,
+  propertyHasBrokerDetails,
+} from './broker';
 import { slugify, toAed } from './format';
 import { realtimeBroker } from './realtime-broker';
 import type {
@@ -145,6 +150,8 @@ export function listProperties(
   let hydrated = db.properties.map((p) => hydrateProperty(db, p));
 
   if (!params.includeUnpublished) {
+    // Listings without the agent's own broker details (ORN, BRN, WhatsApp) are never public.
+    hydrated = hydrated.filter((p) => propertyHasBrokerDetails(p));
     // Public discovery shows properties with at least one ready video OR verified seeded properties
     hydrated = hydrated.map((p) => ({
       ...p,
@@ -261,6 +268,10 @@ export function createProperty(
   input: CreatePropertyInput,
   actor: SessionUser
 ): PropertyWithVideos {
+  const missingBroker = getMissingBrokerFields(actor);
+  if (missingBroker.length > 0) {
+    throw new BrokerDetailsMissingError(missingBroker, 'create');
+  }
   const db = loadDb();
   const id = `prop-${crypto.randomUUID().slice(0, 8)}`;
   const baseSlug = slugify(input.titleEn) || id;
@@ -275,10 +286,11 @@ export function createProperty(
     slug,
     ownerId: actor.id,
     agentName: actor.fullName,
-    agentOrg: actor.orgName ?? 'MakanReel Advisory Dubai',
-    agentOrn: actor.orn ?? 'ORN-29410',
-    agentBrn: actor.brn ?? 'BRN-58914',
-    agentWhatsapp: actor.whatsappNumber ?? '+971504445566',
+    // Never substitute platform details: createProperty refuses above when these are missing.
+    agentOrg: actor.orgName!.trim(),
+    agentOrn: actor.orn!.trim(),
+    agentBrn: actor.brn!.trim(),
+    agentWhatsapp: actor.whatsappNumber!.trim(),
     titleEn: input.titleEn,
     titleAr: input.titleAr?.trim() || input.titleEn,
     descriptionEn: input.descriptionEn,
@@ -298,9 +310,10 @@ export function createProperty(
     developerName: input.developerName,
     projectNumber: input.projectNumber,
     escrowAccount: input.escrowAccount,
-    estNetYieldPct: input.estNetYieldPct ?? 7.2,
-    serviceChargeAedSqft: input.serviceChargeAedSqft ?? 18,
-    paymentPlan: input.paymentPlan ?? (input.status === 'off_plan' ? '60/40 Construction Plan' : 'Standard Transfer'),
+    // Only what the agent supplied: blank stays blank and the UI shows "Not provided".
+    estNetYieldPct: input.estNetYieldPct,
+    serviceChargeAedSqft: input.serviceChargeAedSqft,
+    paymentPlan: input.paymentPlan?.trim() || undefined,
     addressEn: input.addressEn,
     addressAr: input.addressAr?.trim() || input.addressEn,
     community: input.community,
@@ -546,7 +559,10 @@ export function finalizeVideoProcessing(
   video.updatedAt = now;
   property.updatedAt = now;
 
-  if (directPublish) {
+  // A video can only go live directly when the listing carries the agent's own broker details;
+  // otherwise it waits in moderation, where approval is also blocked until they are added.
+  const canGoLive = directPublish && propertyHasBrokerDetails(property);
+  if (canGoLive) {
     video.uploadStatus = 'ready';
     video.moderationStatus = 'approved';
   } else {
@@ -558,7 +574,7 @@ export function finalizeVideoProcessing(
 
   appendAuditLog({
     actor,
-    action: directPublish
+    action: canGoLive
       ? 'video.published.direct'
       : 'video.upload.queued_for_moderation',
     entityType: 'property_video',
@@ -568,7 +584,7 @@ export function finalizeVideoProcessing(
 
   realtimeBroker.publish({
     id: crypto.randomUUID(),
-    type: directPublish ? 'video.ready' : 'video.in_review',
+    type: canGoLive ? 'video.ready' : 'video.in_review',
     timestamp: now,
     propertyId: property.id,
     videoId: video.id,
@@ -591,6 +607,18 @@ export function moderateVideo(
   if (!video) return null;
   const property = db.properties.find((p) => p.id === video.propertyId);
   if (!property) return null;
+
+  if ((action === 'approve' || action === 'retry') && !propertyHasBrokerDetails(property)) {
+    throw new BrokerDetailsMissingError(
+      getMissingBrokerFields({
+        orgName: property.agentOrg,
+        orn: property.agentOrn,
+        brn: property.agentBrn,
+        whatsappNumber: property.agentWhatsapp,
+      }),
+      'publish'
+    );
+  }
 
   const now = new Date().toISOString();
   let nextUploadStatus: VideoUploadStatus = video.uploadStatus;

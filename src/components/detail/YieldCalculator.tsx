@@ -10,7 +10,9 @@ import { formatCurrency } from '@/lib/format';
 interface YieldCalculatorProps {
   priceAed: number;
   areaSqft: number;
+  /** Starting point for the buyer's own gross-yield assumption (not listing data). */
   defaultGrossYieldPct?: number;
+  /** Agent-supplied service charge. When missing the buyer must enter one; we never assume it. */
   serviceChargeAedSqft?: number;
   currency: CurrencyCode;
 }
@@ -18,8 +20,8 @@ interface YieldCalculatorProps {
 export function YieldCalculator({
   priceAed,
   areaSqft,
-  defaultGrossYieldPct = 7.8,
-  serviceChargeAedSqft = 20,
+  defaultGrossYieldPct = 7,
+  serviceChargeAedSqft: agentServiceCharge,
   currency,
 }: YieldCalculatorProps) {
   const t = useTranslations('calculator');
@@ -29,6 +31,16 @@ export function YieldCalculator({
   const [annualInterestRatePct, setAnnualInterestRatePct] = useState(4.65);
   const [tenureYears, setTenureYears] = useState(25);
   const [grossYieldPct, setGrossYieldPct] = useState(defaultGrossYieldPct);
+  const [serviceChargeInput, setServiceChargeInput] = useState(
+    agentServiceCharge != null ? String(agentServiceCharge) : ''
+  );
+  const parsedServiceCharge =
+    serviceChargeInput.trim() === '' ? null : Number(serviceChargeInput);
+  const serviceChargeAedSqft =
+    parsedServiceCharge != null && Number.isFinite(parsedServiceCharge) && parsedServiceCharge >= 0
+      ? parsedServiceCharge
+      : null;
+  const hasServiceCharge = serviceChargeAedSqft != null;
 
   const metrics = useMemo(
     () =>
@@ -39,7 +51,8 @@ export function YieldCalculator({
         annualInterestRatePct,
         tenureYears,
         grossYieldPct,
-        serviceChargeAedSqft,
+        // Net figures are hidden until a service charge is known; 0 here only feeds the mortgage maths.
+        serviceChargeAedSqft: serviceChargeAedSqft ?? 0,
       }),
     [
       priceAed,
@@ -157,6 +170,28 @@ export function YieldCalculator({
             className="w-full accent-[var(--accent-primary)]"
           />
         </label>
+
+        <label className="space-y-1.5 block sm:col-span-2">
+          <span className="block font-medium text-[var(--text-secondary)]">
+            {t('serviceChargeInput')}
+          </span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={500}
+            step={0.5}
+            value={serviceChargeInput}
+            onChange={(e) => setServiceChargeInput(e.target.value)}
+            data-testid="calc-service-charge"
+            className="w-full h-9 px-2.5 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-xs tabular-nums"
+          />
+          {agentServiceCharge == null ? (
+            <span className="block text-[11px] text-[var(--status-warn)]">
+              {t('serviceChargeMissing')}
+            </span>
+          ) : null}
+        </label>
       </div>
 
       {/* Institutional Output Grid */}
@@ -188,18 +223,30 @@ export function YieldCalculator({
 
         <div className="p-3 rounded-[6px] bg-[var(--bg-elevated)]">
           <div className="text-[11px] text-[var(--text-muted)]">{t('netNoi')}</div>
-          <div className="text-base font-bold mt-0.5 text-[var(--status-live)]">
-            {formatCurrency(metrics.annualNetOperatingIncomeAed, currency, locale)}
-          </div>
+          {hasServiceCharge ? (
+            <div className="text-base font-bold mt-0.5 text-[var(--status-live)]">
+              {formatCurrency(metrics.annualNetOperatingIncomeAed, currency, locale)}
+            </div>
+          ) : (
+            <div className="text-xs font-medium mt-1 text-[var(--text-muted)]">
+              {t('needsServiceCharge')}
+            </div>
+          )}
         </div>
 
         <div className="p-3 rounded-[6px] bg-[var(--bg-elevated)] sm:col-span-2">
           <div className="text-[11px] text-[var(--text-muted)]">
             {t('netYield')}
           </div>
-          <div className="text-base font-bold mt-0.5 text-[var(--status-live)]">
-            {metrics.netYieldPct}%
-          </div>
+          {hasServiceCharge ? (
+            <div className="text-base font-bold mt-0.5 text-[var(--status-live)]">
+              {metrics.netYieldPct}%
+            </div>
+          ) : (
+            <div className="text-xs font-medium mt-1 text-[var(--text-muted)]">
+              {t('needsServiceCharge')}
+            </div>
+          )}
         </div>
       </div>
 

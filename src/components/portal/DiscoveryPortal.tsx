@@ -27,6 +27,7 @@ import type {
 import { useAppContext } from '@/components/providers/AppProvider';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { buildWhatsAppUrl, formatArea, formatCurrency } from '@/lib/format';
+import { isUsablePhone } from '@/lib/broker';
 import { ListingVideoCard } from './ListingVideoCard';
 import { CoverflowReelShowcase } from './CoverflowReelShowcase';
 import { AdaptiveVideoPlayer } from '@/components/video/AdaptiveVideoPlayer';
@@ -672,29 +673,31 @@ export function DiscoveryPortal({
                     <Presentation className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                     {t('nav.present')}
                   </Link>
-                  <a
-                    href={buildWhatsAppUrl({
-                      phone: activeProperty.agentWhatsapp,
-                      propertyTitle:
-                        locale === 'ar'
-                          ? activeProperty.titleAr
-                          : activeProperty.titleEn,
-                      permitNumber: activeProperty.permitNumber,
-                      priceFormatted: formatCurrency(
-                        activeProperty.priceAed,
-                        currency,
-                        locale
-                      ),
-                      url: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/properties/${activeProperty.slug}`,
-                      locale,
-                    })}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[6px] bg-[#0F6E4A] text-white text-xs font-semibold hover:opacity-90"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    WhatsApp
-                  </a>
+                  {isUsablePhone(activeProperty.agentWhatsapp) ? (
+                    <a
+                      href={buildWhatsAppUrl({
+                        phone: activeProperty.agentWhatsapp,
+                        propertyTitle:
+                          locale === 'ar'
+                            ? activeProperty.titleAr
+                            : activeProperty.titleEn,
+                        permitNumber: activeProperty.permitNumber,
+                        priceFormatted: formatCurrency(
+                          activeProperty.priceAed,
+                          currency,
+                          locale
+                        ),
+                        url: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/properties/${activeProperty.slug}`,
+                        locale,
+                      })}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[6px] bg-[#0F6E4A] text-white text-xs font-semibold hover:opacity-90"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      WhatsApp
+                    </a>
+                  ) : null}
                 </div>
               </div>
             </div>
