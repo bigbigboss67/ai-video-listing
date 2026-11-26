@@ -24,6 +24,7 @@ import type {
 } from '@/lib/url-extractor';
 import {
   renderAiPropertyVideo,
+  toRenderableImageUrl,
   type RenderedAiVideo,
 } from '@/lib/ai-video-renderer';
 import {
@@ -164,10 +165,17 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
     setRenderPct(5);
     setRendered(null);
     try {
+      const priceBadge = formatCurrency(listing.price, currency, locale);
+      const specsBadge = `${
+        listing.bedrooms === 0 ? 'Studio' : `${listing.bedrooms}BR`
+      } · ${listing.areaSqft.toLocaleString()} sq ft`;
       const output = await renderAiPropertyVideo({
         storyboard,
         permitNumber: listing.permitNumber,
+        madmounQrUrl: listing.madmounQrUrl,
         brandName: t('brand.name'),
+        priceBadge,
+        specsBadge,
         localImages: localPhotoUrls,
         onProgress: (pct) => setRenderPct(pct),
       });
@@ -420,11 +428,13 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                 <StatusPill
                   status="ready"
                   label={
-                    listing.extractionMode === 'live_html'
-                      ? 'Live HTML Parsed'
-                      : listing.extractionMode === 'sample_preset'
-                        ? 'UAE Preset Loaded'
-                        : 'URL Parsed'
+                    listing.extractionMode === 'next_data'
+                      ? `Live Portal Parsed · ${listing.imageUrls.length} Photos`
+                      : listing.extractionMode === 'live_html'
+                        ? `Live HTML Parsed · ${listing.imageUrls.length} Photos`
+                        : listing.extractionMode === 'sample_preset'
+                          ? 'UAE Preset Loaded'
+                          : 'URL Parsed'
                   }
                 />
               </div>
@@ -472,7 +482,8 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                 <div className="p-2.5 rounded-[6px] bg-[var(--bg-elevated)]">
                   <div className="text-[11px] text-[var(--text-muted)]">Specs</div>
                   <div className="font-semibold mt-0.5">
-                    {listing.bedrooms}BR · {listing.areaSqft.toLocaleString()} ft²
+                    {listing.bedrooms === 0 ? 'Studio' : `${listing.bedrooms}BR`} ·{' '}
+                    {listing.areaSqft.toLocaleString()} ft²
                   </div>
                 </div>
                 <div className="p-2.5 rounded-[6px] bg-[var(--bg-elevated)]">
@@ -484,6 +495,39 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                   </div>
                 </div>
               </div>
+
+              {/* Real Extracted & Uploaded Photo Gallery Strip */}
+              {(listing.imageUrls.length > 0 || localPhotoUrls.length > 0) ? (
+                <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]" data-testid="ai-extracted-photos">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
+                    <span>
+                      Media Scenes Loaded ({localPhotoUrls.length + listing.imageUrls.length} real photos)
+                    </span>
+                    <span className="text-[var(--status-live)]">Same-Origin CORS Proxy Active</span>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {[...localPhotoUrls, ...listing.imageUrls].slice(0, 12).map((rawUrl, idx) => {
+                      const src = toRenderableImageUrl(rawUrl) || rawUrl;
+                      return (
+                        <div
+                          key={`${rawUrl}-${idx}`}
+                          className="relative aspect-[4/3] rounded-[4px] overflow-hidden border border-[var(--border-subtle)] bg-[#0D0F12]"
+                        >
+                          <img
+                            src={src}
+                            alt={`Scene ${idx + 1}`}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                          />
+                          <span className="absolute bottom-1 start-1 px-1 py-0.5 rounded bg-black/75 text-[9px] font-mono-code text-white">
+                            #{idx + 1}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Optional Listing Photo Uploader for Ken Burns Scenes */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border-subtle)]">
@@ -668,7 +712,8 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                   />
                   <div className="flex items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
                     <span className="font-mono-code bidi-ltr">
-                      {(rendered.file.size / 1024).toFixed(0)} KB · {rendered.durationSec}s
+                      {(rendered.file.size / 1024).toFixed(0)} KB · {rendered.durationSec}s ·{' '}
+                      {rendered.photosUsedCount} real photos
                     </span>
                     <a
                       href={rendered.previewUrl}

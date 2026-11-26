@@ -98,9 +98,20 @@ function loadDb(): LocalDatabase {
 
 function persistDb(db: LocalDatabase): void {
   ensureDirs();
-  const tmpFile = `${DB_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpFile, JSON.stringify(db, null, 2), 'utf8');
-  fs.renameSync(tmpFile, DB_FILE);
+  const payload = JSON.stringify(db, null, 2);
+  const tmpFile = `${DB_FILE}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tmpFile, payload, 'utf8');
+    fs.renameSync(tmpFile, DB_FILE);
+  } catch {
+    // Windows/OneDrive sync can briefly lock target files during rename
+    fs.writeFileSync(DB_FILE, payload, 'utf8');
+    try {
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    } catch {
+      // Ignore temp cleanup error
+    }
+  }
 }
 
 export function resetLocalStoreForTests(): void {

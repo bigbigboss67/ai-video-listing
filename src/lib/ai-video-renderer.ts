@@ -8,40 +8,127 @@ export interface RenderedAiVideo {
   previewUrl: string;
   posterDataUrl: string;
   durationSec: number;
+  photosUsedCount: number;
 }
 
-async function loadOptionalImage(src?: string): Promise<HTMLImageElement | null> {
-  if (!src) return null;
+export function toRenderableImageUrl(rawUrl?: string): string | null {
+  if (!rawUrl) return null;
+  if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:') || rawUrl.startsWith('/')) {
+    return rawUrl;
+  }
+  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+    return `/api/ai/proxy-image?url=${encodeURIComponent(rawUrl)}`;
+  }
+  return null;
+}
+
+async function loadImageForCanvas(src?: string): Promise<HTMLImageElement | null> {
+  const safeSrc = toRenderableImageUrl(src);
+  if (!safeSrc) return null;
+
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    const timer = window.setTimeout(() => resolve(null), 2500);
+    const timer = window.setTimeout(() => resolve(null), 6500);
     img.onload = () => {
       window.clearTimeout(timer);
-      resolve(img);
+      resolve(img.naturalWidth > 0 ? img : null);
     };
     img.onerror = () => {
       window.clearTimeout(timer);
       resolve(null);
     };
-    img.src = src;
+    img.src = safeSrc;
   });
 }
 
-function drawArchitecturalBackdrop(
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawCoverPhotoWithKenBurns(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  width: number,
+  height: number,
+  motion: 'zoom-in' | 'pan-right' | 'zoom-out' | 'pan-left',
+  tRaw: number,
+  alpha = 1
+) {
+  const t = easeInOutQuad(Math.max(0, Math.min(1, tRaw)));
+  const imgAspect = img.naturalWidth / Math.max(img.naturalHeight, 1);
+  const canvasAspect = width / height;
+
+  let drawW = width;
+  let drawH = height;
+  if (imgAspect > canvasAspect) {
+    drawW = height * imgAspect;
+  } else {
+    drawH = width / imgAspect;
+  }
+
+  // Subtle cinematic zoom & drift (never jarring, always smooth)
+  const zoom =
+    motion === 'zoom-out'
+      ? 1.15 - t * 0.09
+      : motion === 'zoom-in'
+        ? 1.04 + t * 0.1
+        : 1.1;
+
+  const maxDriftX = Math.max(24, (drawW * zoom - width) * 0.35);
+  const panX =
+    motion === 'pan-right'
+      ? (t - 0.5) * maxDriftX
+      : motion === 'pan-left'
+        ? (0.5 - t) * maxDriftX
+        : 0;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(width / 2 + panX, height / 2);
+  ctx.scale(zoom, zoom);
+  ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+  ctx.restore();
+}
+
+function drawFallbackBackdrop(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
   t: number,
-  sceneIdx: number
+  sceneIdx: number,
+  alpha = 1
 ) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
   const grad = ctx.createLinearGradient(0, 0, w, h);
   const palettes: [string, string][] = [
-    ['#0E1117', '#1D2533'],
-    ['#12161E', '#242A36'],
-    ['#0F141A', '#1B282A'],
-    ['#14131A', '#26211A'],
-    ['#0D1015', '#1C222D'],
+    ['#0D1017', '#1D2533'],
+    ['#111620', '#242A36'],
+    ['#0E151B', '#1B2A2C'],
+    ['#15141B', '#28221A'],
+    ['#0C1016', '#1C222E'],
   ];
   const [c1, c2] = palettes[sceneIdx % palettes.length];
   grad.addColorStop(0, c1);
@@ -49,44 +136,14 @@ function drawArchitecturalBackdrop(
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // Subtle moving architectural gridlines (Ken Burns parallax)
-  ctx.save();
-  ctx.strokeStyle = 'rgba(212, 175, 106, 0.14)';
+  ctx.strokeStyle = 'rgba(212, 175, 106, 0.12)';
   ctx.lineWidth = 1;
-  const shift = Math.round(t * 24);
-  for (let x = -80; x < w + 80; x += 90) {
+  const shift = Math.round(t * 18);
+  for (let x = -80; x < w + 80; x += 80) {
     ctx.beginPath();
-    ctx.moveTo(x + (shift % 90), 0);
-    ctx.lineTo(x + (shift % 90), h);
+    ctx.moveTo(x + (shift % 80), 0);
+    ctx.lineTo(x + (shift % 80), h);
     ctx.stroke();
-  }
-  for (let y = -80; y < h + 80; y += 90) {
-    ctx.beginPath();
-    ctx.moveTo(0, y + (shift % 90));
-    ctx.lineTo(w, y + (shift % 90));
-    ctx.stroke();
-  }
-
-  // Stylized Dubai skyline silhouette geometry
-  const baseY = h * 0.72;
-  ctx.fillStyle = 'rgba(212, 175, 106, 0.08)';
-  ctx.strokeStyle = 'rgba(212, 175, 106, 0.35)';
-  ctx.lineWidth = 1.5;
-  const scale = 1 + t * 0.06;
-  ctx.translate(w / 2, baseY);
-  ctx.scale(scale, scale);
-  ctx.translate(-w / 2, -baseY);
-
-  const towers = [
-    { x: w * 0.14, bw: w * 0.11, bh: h * 0.28 },
-    { x: w * 0.28, bw: w * 0.09, bh: h * 0.38 },
-    { x: w * 0.43, bw: w * 0.12, bh: h * 0.46 },
-    { x: w * 0.59, bw: w * 0.1, bh: h * 0.34 },
-    { x: w * 0.74, bw: w * 0.11, bh: h * 0.25 },
-  ];
-  for (const tw of towers) {
-    ctx.fillRect(tw.x, baseY - tw.bh, tw.bw, tw.bh);
-    ctx.strokeRect(tw.x, baseY - tw.bh, tw.bw, tw.bh);
   }
   ctx.restore();
 }
@@ -94,9 +151,10 @@ function drawArchitecturalBackdrop(
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
-  maxWidth: number
+  maxWidth: number,
+  maxLines = 2
 ): string[] {
-  const words = text.split(/\s+/);
+  const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = '';
   for (const word of words) {
@@ -109,24 +167,37 @@ function wrapText(
     }
   }
   if (current) lines.push(current);
-  return lines.slice(0, 3);
+  return lines.slice(0, maxLines);
 }
 
 /**
- * Renders a real, playable WebM/MP4 property walkthrough video in the browser
- * using HTML5 Canvas 2D Ken Burns animation + MediaRecorder + burned-in DLD Madmoun QR.
+ * Renders a smooth, high-resolution, real-photo Ken Burns property video in the browser
+ * with crossfade transitions, frosted luxury typography cards, and burned-in DLD Madmoun QR.
  */
 export async function renderAiPropertyVideo(params: {
   storyboard: GeneratedStoryboard;
   permitNumber: string;
+  madmounQrUrl?: string;
   brandName: string;
+  priceBadge?: string;
+  specsBadge?: string;
   localImages?: string[];
   onProgress?: (pct: number) => void;
 }): Promise<RenderedAiVideo> {
-  const { storyboard, permitNumber, brandName, localImages = [], onProgress } = params;
+  const {
+    storyboard,
+    permitNumber,
+    madmounQrUrl,
+    brandName,
+    priceBadge,
+    specsBadge,
+    localImages = [],
+    onProgress,
+  } = params;
+
   const isVertical = storyboard.aspectRatio === '9:16';
-  const width = isVertical ? 540 : 960;
-  const height = isVertical ? 960 : 540;
+  const width = isVertical ? 720 : 1280;
+  const height = isVertical ? 1280 : 720;
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -136,25 +207,38 @@ export async function renderAiPropertyVideo(params: {
     throw new Error('Canvas 2D context unavailable in this browser.');
   }
 
-  // Generate scannable DLD Madmoun QR onto an offscreen canvas
+  onProgress?.(6);
+
+  // Generate scannable official DLD Madmoun QR code onto offscreen canvas
   const qrCanvas = document.createElement('canvas');
   await QRCode.toCanvas(
     qrCanvas,
-    `https://dubailand.gov.ae/en/eservices/trakheesi-verification?permit=${encodeURIComponent(permitNumber)}`,
-    { width: 88, margin: 1, color: { dark: '#12151A', light: '#FFFFFF' } }
+    madmounQrUrl ||
+      `https://dubailand.gov.ae/en/eservices/trakheesi-verification?permit=${encodeURIComponent(permitNumber)}`,
+    { width: 108, margin: 1, color: { dark: '#12151A', light: '#FFFFFF' } }
   );
 
-  // Preload uploaded or extracted photos cleanly
-  const loadedImages: (HTMLImageElement | null)[] = await Promise.all(
-    storyboard.scenes.map((sc, idx) =>
-      loadOptionalImage(localImages[idx % Math.max(localImages.length, 1)] || sc.imageUrl)
-    )
+  // Build ordered photo pool (user uploaded local photos + extracted listing gallery photos)
+  const sceneUrls = storyboard.scenes.map((sc, idx) => {
+    if (localImages.length > 0) {
+      return localImages[idx % localImages.length];
+    }
+    return sc.imageUrl;
+  });
+
+  // Preload all real photos through our same-origin proxy (zero CORS failures)
+  const rawLoaded = await Promise.all(sceneUrls.map((u) => loadImageForCanvas(u)));
+  const validPool = rawLoaded.filter((img): img is HTMLImageElement => img !== null);
+  const loadedImages: (HTMLImageElement | null)[] = rawLoaded.map((img, i) =>
+    img ?? (validPool.length > 0 ? validPool[i % validPool.length] : null)
   );
+
+  onProgress?.(18);
 
   const isRtl = storyboard.locale === 'ar';
-  const fps = 20;
-  // Cap total live render duration to ~5–7s in browser for snappy UX while preserving all 5 scenes
-  const sceneRenderMs = 1100;
+  const fps = 25;
+  const sceneRenderMs = 2200; // 2.2s per scene -> 11s crisp luxury reel
+  const crossfadeMs = 420;
   const totalRenderMs = storyboard.scenes.length * sceneRenderMs;
 
   const drawFrame = (elapsedMs: number) => {
@@ -163,108 +247,161 @@ export async function renderAiPropertyVideo(params: {
       Math.floor(elapsedMs / sceneRenderMs)
     );
     const scene = storyboard.scenes[sceneIdx];
-    const t = Math.min(1, (elapsedMs - sceneIdx * sceneRenderMs) / sceneRenderMs);
+    const sceneElapsed = elapsedMs - sceneIdx * sceneRenderMs;
+    const t = Math.min(1, sceneElapsed / sceneRenderMs);
     const img = loadedImages[sceneIdx];
 
     ctx.clearRect(0, 0, width, height);
 
-    if (img) {
-      // Smooth Ken Burns zoom/pan over actual listing photo
-      const imgAspect = img.width / Math.max(img.height, 1);
-      const canvasAspect = width / height;
-      let drawW = width;
-      let drawH = height;
-      if (imgAspect > canvasAspect) {
-        drawW = height * imgAspect;
+    // Smooth crossfade from previous scene photo at the start of each new scene
+    const inCrossfade = sceneIdx > 0 && sceneElapsed < crossfadeMs;
+    if (inCrossfade) {
+      const prevIdx = sceneIdx - 1;
+      const prevImg = loadedImages[prevIdx];
+      const prevScene = storyboard.scenes[prevIdx];
+      if (prevImg) {
+        drawCoverPhotoWithKenBurns(ctx, prevImg, width, height, prevScene.motion, 1, 1);
       } else {
-        drawH = width / imgAspect;
+        drawFallbackBackdrop(ctx, width, height, 1, prevIdx, 1);
       }
-      const zoom =
-        scene.motion === 'zoom-out' ? 1.14 - t * 0.08 : 1.04 + t * 0.09;
-      const panX =
-        scene.motion === 'pan-right'
-          ? (t - 0.5) * 32
-          : scene.motion === 'pan-left'
-            ? (0.5 - t) * 32
-            : 0;
-
-      ctx.save();
-      ctx.translate(width / 2 + panX, height / 2);
-      ctx.scale(zoom, zoom);
-      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
-      ctx.restore();
+      const blendAlpha = easeInOutQuad(sceneElapsed / crossfadeMs);
+      if (img) {
+        drawCoverPhotoWithKenBurns(ctx, img, width, height, scene.motion, t, blendAlpha);
+      } else {
+        drawFallbackBackdrop(ctx, width, height, t, sceneIdx, blendAlpha);
+      }
+    } else if (img) {
+      drawCoverPhotoWithKenBurns(ctx, img, width, height, scene.motion, t, 1);
     } else {
-      drawArchitecturalBackdrop(ctx, width, height, t, sceneIdx);
+      drawFallbackBackdrop(ctx, width, height, t, sceneIdx, 1);
     }
 
-    // Editorial dark vignette for WCAG AA text legibility
-    const overlayGrad = ctx.createLinearGradient(0, 0, 0, height);
-    overlayGrad.addColorStop(0, 'rgba(13, 15, 18, 0.55)');
-    overlayGrad.addColorStop(0.45, 'rgba(13, 15, 18, 0.18)');
-    overlayGrad.addColorStop(1, 'rgba(13, 15, 18, 0.90)');
-    ctx.fillStyle = overlayGrad;
-    ctx.fillRect(0, 0, width, height);
+    // Refined editorial gradient scrims (top light vignette + bottom reading scrim — keeps center photo bright!)
+    const topScrim = ctx.createLinearGradient(0, 0, 0, height * 0.28);
+    topScrim.addColorStop(0, 'rgba(10, 13, 18, 0.72)');
+    topScrim.addColorStop(1, 'rgba(10, 13, 18, 0)');
+    ctx.fillStyle = topScrim;
+    ctx.fillRect(0, 0, width, height * 0.28);
 
-    // Subtle champagne architectural border
-    ctx.strokeStyle = 'rgba(212, 175, 106, 0.45)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(18, 18, width - 36, height - 36);
+    const botScrim = ctx.createLinearGradient(0, height * 0.56, 0, height);
+    botScrim.addColorStop(0, 'rgba(10, 13, 18, 0)');
+    botScrim.addColorStop(1, 'rgba(10, 13, 18, 0.88)');
+    ctx.fillStyle = botScrim;
+    ctx.fillRect(0, height * 0.56, width, height * 0.44);
 
-    // Top bar: Brand + Scene tag + DLD Madmoun QR code
+    // Top-left (or top-right in RTL) Brand & Price/Specs Pill
+    const pad = isVertical ? 32 : 40;
+    const textAnchorX = isRtl ? width - pad : pad;
     ctx.textAlign = isRtl ? 'right' : 'left';
+
     ctx.fillStyle = '#D4AF6A';
-    ctx.font = 'bold 14px sans-serif';
-    const textAnchorX = isRtl ? width - 36 : 36;
-    ctx.fillText(brandName.toUpperCase(), textAnchorX, 50);
+    ctx.font = `700 ${isVertical ? 16 : 18}px sans-serif`;
+    ctx.fillText(brandName.toUpperCase(), textAnchorX, pad + 18);
 
-    ctx.fillStyle = 'rgba(244, 245, 247, 0.8)';
-    ctx.font = '600 12px monospace';
-    ctx.fillText(scene.label, textAnchorX, 72);
+    if (priceBadge || specsBadge) {
+      const pillText = [priceBadge, specsBadge].filter(Boolean).join('  ·  ');
+      ctx.font = `600 ${isVertical ? 14 : 15}px sans-serif`;
+      const pillW = Math.min(width - 190, ctx.measureText(pillText).width + 28);
+      const pillH = 34;
+      const pillX = isRtl ? width - pad - pillW : pad;
+      const pillY = pad + 30;
 
-    // Burn-in Scannable Madmoun QR Code in opposite top corner
-    const qrX = isRtl ? 32 : width - 116;
+      ctx.fillStyle = 'rgba(14, 17, 23, 0.78)';
+      drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 6);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(212, 175, 106, 0.55)';
+      ctx.lineWidth = 1.25;
+      ctx.stroke();
+
+      ctx.fillStyle = '#F9FAFB';
+      ctx.fillText(
+        pillText,
+        isRtl ? pillX + pillW - 14 : pillX + 14,
+        pillY + 22
+      );
+    }
+
+    // Opposite Top Corner: Frosted DLD Madmoun Verification QR Card
+    const qrBoxSize = isVertical ? 96 : 104;
+    const qrX = isRtl ? pad : width - pad - qrBoxSize;
+    const qrY = pad;
+    ctx.fillStyle = 'rgba(14, 17, 23, 0.82)';
+    drawRoundedRect(ctx, qrX - 8, qrY - 6, qrBoxSize + 16, qrBoxSize + 32, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(52, 211, 153, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(qrX, 32, 84, 84);
-    ctx.drawImage(qrCanvas, qrX + 2, 34, 80, 80);
+    drawRoundedRect(ctx, qrX, qrY, qrBoxSize, qrBoxSize, 4);
+    ctx.fill();
+    ctx.drawImage(qrCanvas, qrX + 3, qrY + 3, qrBoxSize - 6, qrBoxSize - 6);
+
     ctx.fillStyle = '#34D399';
-    ctx.font = 'bold 10px monospace';
+    ctx.font = '700 11px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`DLD #${permitNumber.slice(-6)}`, qrX + 42, 130);
+    ctx.fillText(`DLD #${permitNumber.slice(-6)}`, qrX + qrBoxSize / 2, qrY + qrBoxSize + 17);
 
-    // Bottom architectural lower-third card
+    // Bottom Luxury Lower-Third Frosted Card with gentle entrance fade
+    const cardAlpha = Math.min(1, sceneElapsed / 280);
+    const cardSlideY = (1 - cardAlpha) * 14;
+    const cardW = width - pad * 2;
+    const cardH = isVertical ? 210 : 152;
+    const cardX = pad;
+    const cardY = height - pad - cardH - 18 + cardSlideY;
+
+    ctx.save();
+    ctx.globalAlpha = cardAlpha;
+    ctx.fillStyle = 'rgba(13, 16, 22, 0.80)';
+    drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 10);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(212, 175, 106, 0.42)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Vertical Gold Accent Bar inside Card
+    const barX = isRtl ? cardX + cardW - 18 : cardX + 14;
+    ctx.fillStyle = '#D4AF6A';
+    ctx.fillRect(barX, cardY + 18, 4, cardH - 36);
+
+    const innerAnchorX = isRtl ? cardX + cardW - 32 : cardX + 32;
+    const maxTextW = cardW - 56;
     ctx.textAlign = isRtl ? 'right' : 'left';
-    const maxTextW = width - 72;
-    const headlineY = height - (isVertical ? 190 : 128);
 
+    // Scene Label
     ctx.fillStyle = '#D4AF6A';
-    ctx.fillRect(isRtl ? width - 36 - 48 : 36, headlineY - 38, 48, 3);
+    ctx.font = `700 ${isVertical ? 13 : 13}px monospace`;
+    ctx.fillText(scene.label.toUpperCase(), innerAnchorX, cardY + 34);
 
+    // Headline
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${isVertical ? 30 : 34}px sans-serif`;
-    const headlineLines = wrapText(ctx, scene.headline, maxTextW);
+    ctx.font = `700 ${isVertical ? 34 : 36}px sans-serif`;
+    const headlineLines = wrapText(ctx, scene.headline, maxTextW, 2);
     headlineLines.forEach((line, idx) => {
-      ctx.fillText(line, textAnchorX, headlineY + idx * 38);
+      ctx.fillText(line, innerAnchorX, cardY + 74 + idx * (isVertical ? 40 : 42));
     });
 
+    // Caption
     ctx.fillStyle = '#D1D5DB';
-    ctx.font = `500 ${isVertical ? 17 : 18}px sans-serif`;
-    const captionLines = wrapText(ctx, scene.caption, maxTextW);
-    const captionStartY = headlineY + headlineLines.length * 38 + 8;
+    ctx.font = `500 ${isVertical ? 19 : 19}px sans-serif`;
+    const captionLines = wrapText(ctx, scene.caption, maxTextW, 2);
+    const captionY = cardY + 74 + headlineLines.length * (isVertical ? 40 : 42) + 8;
     captionLines.forEach((line, idx) => {
-      ctx.fillText(line, textAnchorX, captionStartY + idx * 24);
+      ctx.fillText(line, innerAnchorX, captionY + idx * 25);
     });
+    ctx.restore();
 
-    // Progress bar across bottom
+    // Sleek Bottom Progress Rail
     const totalPct = Math.min(1, elapsedMs / totalRenderMs);
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(36, height - 34, width - 72, 4);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.fillRect(pad, height - pad + 4, cardW, 4);
     ctx.fillStyle = '#D4AF6A';
-    ctx.fillRect(36, height - 34, (width - 72) * totalPct, 4);
+    ctx.fillRect(pad, height - pad + 4, cardW * totalPct, 4);
   };
 
-  // Paint scene 1 immediately to capture poster thumbnail
-  drawFrame(250);
-  const posterDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  // Render scene 1 hero frame immediately for poster thumbnail
+  drawFrame(320);
+  const posterDataUrl = canvas.toDataURL('image/jpeg', 0.88);
 
   const preferredMime =
     typeof MediaRecorder !== 'undefined'
@@ -283,7 +420,7 @@ export async function renderAiPropertyVideo(params: {
     const stream = canvas.captureStream(fps);
     const recorder = new MediaRecorder(stream, {
       mimeType: preferredMime,
-      videoBitsPerSecond: 2_800_000,
+      videoBitsPerSecond: 4_200_000,
     });
     const chunks: Blob[] = [];
     recorder.ondataavailable = (ev) => {
@@ -296,7 +433,8 @@ export async function renderAiPropertyVideo(params: {
       const timer = window.setInterval(() => {
         elapsed += stepMs;
         drawFrame(Math.min(elapsed, totalRenderMs));
-        onProgress?.(Math.min(99, Math.round((elapsed / totalRenderMs) * 100)));
+        const pct = 18 + Math.round((elapsed / totalRenderMs) * 81);
+        onProgress?.(Math.min(99, pct));
         if (elapsed >= totalRenderMs) {
           window.clearInterval(timer);
           if (recorder.state !== 'inactive') recorder.stop();
@@ -323,10 +461,10 @@ export async function renderAiPropertyVideo(params: {
       previewUrl: URL.createObjectURL(file),
       posterDataUrl,
       durationSec: Math.round(totalRenderMs / 1000),
+      photosUsedCount: validPool.length,
     };
   }
 
-  // Deterministic fallback for browsers lacking canvas.captureStream
   onProgress?.(100);
   const fallbackBytes = new Uint8Array(640_000);
   fallbackBytes.set([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x32], 0);
@@ -338,5 +476,6 @@ export async function renderAiPropertyVideo(params: {
     previewUrl: URL.createObjectURL(file),
     posterDataUrl,
     durationSec: Math.round(storyboard.totalDurationSec),
+    photosUsedCount: validPool.length,
   };
 }

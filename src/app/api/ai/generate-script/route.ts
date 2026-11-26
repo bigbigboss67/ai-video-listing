@@ -10,6 +10,8 @@ const scriptRequestSchema = z.object({
     titleEn: z.string().min(2),
     titleAr: z.string().optional().default(''),
     community: z.string().min(2),
+    buildingName: z.string().optional(),
+    amenities: z.array(z.string()).optional(),
     propertyType: z.enum([
       'apartment',
       'villa',

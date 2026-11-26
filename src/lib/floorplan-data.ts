@@ -32,7 +32,83 @@ export function getFloorPlanForProperty(params: {
   areaSqft: number;
   bedrooms: number;
 }): ArchitecturalFloorPlan {
-  const total = Math.max(600, Math.round(params.areaSqft));
+  const total = Math.max(350, Math.round(params.areaSqft));
+
+  // Dedicated Studio Architectural Floorplate
+  if (params.bedrooms === 0 && params.propertyType === 'apartment') {
+    return {
+      levelLabelEn: 'Designer Open-Plan Studio Floorplate',
+      levelLabelAr: 'مخطط استوديو معماري مفتوح',
+      orientation: 'W · Golf Course & Skyline View',
+      totalSqft: total,
+      rooms: [
+        {
+          id: 'rm-studio-suite',
+          nameEn: 'Open Living & Sleeping Suite',
+          nameAr: 'مساحة المعيشة والنوم المفتوحة',
+          zone: 'living',
+          x: 8,
+          y: 12,
+          w: 56,
+          h: 52,
+          wallHeightPx: 36,
+          areaSqft: Math.round(total * 0.48),
+          dimensionsLabel: '5.6m × 3.8m',
+          finishEn: 'Floor-to-Ceiling Glazing · Built-in Media Wall · Smart Climate',
+          finishAr: 'واجهات زجاجية كاملة · جدار ترفيه مدمج · تحكم ذكي بالتكييف',
+          videoCueSec: 4,
+        },
+        {
+          id: 'rm-studio-kitchen',
+          nameEn: 'Fitted Kitchenette & Dining Bar',
+          nameAr: 'مطبخ حديث مجهز بالكامل',
+          zone: 'kitchen',
+          x: 66,
+          y: 12,
+          w: 26,
+          h: 32,
+          wallHeightPx: 34,
+          areaSqft: Math.round(total * 0.16),
+          dimensionsLabel: '2.8m × 2.2m',
+          finishEn: 'Quartz Countertop · Integrated Appliances · Matte Cabinetry',
+          finishAr: 'سطح كوارتز · أجهزة مدمجة · خزائن مطفية حديثة',
+          videoCueSec: 10,
+        },
+        {
+          id: 'rm-studio-bath',
+          nameEn: 'Walk-in Rain Shower Spa Bath',
+          nameAr: 'حمام عصري مع دوش مطري',
+          zone: 'bedroom',
+          x: 66,
+          y: 46,
+          w: 26,
+          h: 34,
+          wallHeightPx: 34,
+          areaSqft: Math.round(total * 0.16),
+          dimensionsLabel: '2.6m × 2.1m',
+          finishEn: 'Porcelain Stone Tile · Backlit Mirror · Brushed Fixtures',
+          finishAr: 'بلاط بورسلان حجري · مرآة مضاءة · إكسسوارات فاخرة',
+          videoCueSec: 16,
+        },
+        {
+          id: 'rm-studio-balcony',
+          nameEn: 'Panoramic View Balcony',
+          nameAr: 'شرفة بإطلالة بانورامية',
+          zone: 'outdoor',
+          x: 8,
+          y: 66,
+          w: 56,
+          h: 22,
+          wallHeightPx: 14,
+          areaSqft: Math.round(total * 0.2),
+          dimensionsLabel: '5.4m × 1.5m',
+          finishEn: 'Frameless Glass Rail · Golf & Skyline Vista',
+          finishAr: 'حاجز زجاجي شفاف · إطلالة على ملعب الغولف والأفق',
+          videoCueSec: 22,
+        },
+      ],
+    };
+  }
 
   if (params.propertyType === 'villa' || params.propertyType === 'townhouse') {
     return {

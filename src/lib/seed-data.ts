@@ -531,16 +531,26 @@ export const SEED_AUDIT_LOGS: AuditLog[] = [
   },
 ];
 
-// Curated Dubai communities for fast offline/instant geocoding fallback
+// Curated Dubai & UAE communities for fast offline/instant geocoding and URL extraction
 export const DUBAI_COMMUNITIES = [
   { nameEn: 'Palm Jumeirah', nameAr: 'نخلة جميرا', addressEn: 'Palm Jumeirah, Dubai, UAE', addressAr: 'نخلة جميرا، دبي، الإمارات', lat: 25.1124, lng: 55.139 },
   { nameEn: 'Downtown Dubai', nameAr: 'وسط مدينة دبي', addressEn: 'Mohammed Bin Rashid Blvd, Downtown Dubai, UAE', addressAr: 'بوليفارد محمد بن راشد، وسط مدينة دبي، الإمارات', lat: 25.1972, lng: 55.2744 },
   { nameEn: 'Dubai Marina', nameAr: 'مرسى دبي', addressEn: 'Marina Walk, Dubai Marina, Dubai, UAE', addressAr: 'ممشى المارينا، مرسى دبي، دبي، الإمارات', lat: 25.0805, lng: 55.1403 },
+  { nameEn: 'Jumeirah Lake Towers (JLT)', nameAr: 'أبراج بحيرات جميرا (JLT)', addressEn: 'Jumeirah Lake Towers, Dubai, UAE', addressAr: 'أبراج بحيرات جميرا، دبي، الإمارات', lat: 25.075, lng: 55.146 },
+  { nameEn: 'Jumeirah Beach Residence (JBR)', nameAr: 'جميرا بيتش ريزيدنس (JBR)', addressEn: 'The Walk, JBR, Dubai, UAE', addressAr: 'الممشى، جميرا بيتش ريزيدنس، دبي', lat: 25.0785, lng: 55.1335 },
+  { nameEn: 'Jumeirah Village Circle (JVC)', nameAr: 'قرية جميرا الدائرية (JVC)', addressEn: 'Jumeirah Village Circle, Dubai, UAE', addressAr: 'قرية جميرا الدائرية، دبي، الإمارات', lat: 25.0553, lng: 55.2098 },
   { nameEn: 'Dubai Creek Harbour', nameAr: 'ميناء خور دبي', addressEn: 'Creek Island, Dubai Creek Harbour, UAE', addressAr: 'جزيرة الخور، ميناء خور دبي، الإمارات', lat: 25.2048, lng: 55.3461 },
   { nameEn: 'Business Bay', nameAr: 'الخليج التجاري', addressEn: 'Marasi Drive, Business Bay, Dubai, UAE', addressAr: 'شارع المراسي، الخليج التجاري، دبي، الإمارات', lat: 25.185, lng: 55.272 },
   { nameEn: 'DIFC', nameAr: 'مركز دبي المالي العالمي', addressEn: 'Gate District, DIFC, Dubai, UAE', addressAr: 'منطقة البوابة، مركز دبي المالي العالمي، دبي', lat: 25.2121, lng: 55.2806 },
   { nameEn: 'Dubai Hills Estate', nameAr: 'دبي هيلز استيت', addressEn: 'Dubai Hills Estate, Dubai, UAE', addressAr: 'دبي هيلز استيت، دبي، الإمارات', lat: 25.1072, lng: 55.2448 },
   { nameEn: 'Jumeirah Bay Island', nameAr: 'جزيرة جميرا باي', addressEn: 'Jumeirah Bay Island, Jumeirah 2, Dubai, UAE', addressAr: 'جزيرة جميرا باي، جميرا 2، دبي، الإمارات', lat: 25.2078, lng: 55.2328 },
   { nameEn: 'Emaar Beachfront', nameAr: 'إعمار بيتشفرونت', addressEn: 'Dubai Harbour, Emaar Beachfront, Dubai, UAE', addressAr: 'دبي هاربر، إعمار بيتشفرونت، دبي، الإمارات', lat: 25.0919, lng: 55.1342 },
+  { nameEn: 'Bluewaters Island', nameAr: 'جزيرة بلوواترز', addressEn: 'Bluewaters Island, Dubai, UAE', addressAr: 'جزيرة بلوواترز، دبي، الإمارات', lat: 25.0796, lng: 55.1225 },
+  { nameEn: 'City Walk', nameAr: 'سيتي ووك', addressEn: 'Al Wasl, City Walk, Dubai, UAE', addressAr: 'الوصل، سيتي ووك، دبي، الإمارات', lat: 25.2067, lng: 55.2633 },
+  { nameEn: 'Sobha Hartland', nameAr: 'شوبا هارتلاند', addressEn: 'MBR City, Sobha Hartland, Dubai, UAE', addressAr: 'مدينة محمد بن راشد، شوبا هارتلاند، دبي', lat: 25.1766, lng: 55.3088 },
+  { nameEn: 'DAMAC Hills', nameAr: 'داماك هيلز', addressEn: 'Al Qudra Rd, DAMAC Hills, Dubai, UAE', addressAr: 'شارع القدرة، داماك هيلز، دبي', lat: 25.0258, lng: 55.2442 },
+  { nameEn: 'Arabian Ranches', nameAr: 'المرابع العربية', addressEn: 'Arabian Ranches, Dubai, UAE', addressAr: 'المرابع العربية، دبي، الإمارات', lat: 25.0566, lng: 55.2683 },
+  { nameEn: 'Al Furjan', nameAr: 'الفرجان', addressEn: 'Al Furjan, Dubai, UAE', addressAr: 'الفرجان، دبي، الإمارات', lat: 25.0297, lng: 55.1466 },
+  { nameEn: 'Dubai South', nameAr: 'دبي الجنوب', addressEn: 'Dubai South, Dubai, UAE', addressAr: 'دبي الجنوب، دبي، الإمارات', lat: 24.8965, lng: 55.1614 },
   { nameEn: 'Saadiyat Island', nameAr: 'جزيرة السعديات', addressEn: 'Cultural District, Saadiyat Island, Abu Dhabi, UAE', addressAr: 'المنطقة الثقافية، جزيرة السعديات، أبوظبي', lat: 24.5403, lng: 54.4347 },
 ] as const;

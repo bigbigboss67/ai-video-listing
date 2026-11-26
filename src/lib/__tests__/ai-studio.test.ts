@@ -87,4 +87,70 @@ describe('AI URL-to-Video Studio — SSRF Guard, Extraction & Storyboard', () =>
     expect(arBriefing.scenes).toHaveLength(5);
     expect(arBriefing.scenes[0].label).toContain('المشهد');
   });
+
+  it('extracts exact Property Finder __NEXT_DATA__ Studio specs, coordinates, Madmoun QR, and high-res gallery', () => {
+    const pfNextData = {
+      props: {
+        pageProps: {
+          propertyResult: {
+            property: {
+              title: 'Modern Studio | Golf View | Great Investment',
+              price: { value: 530000, currency: 'AED' },
+              bedrooms: 'studio',
+              bedrooms_value: 0,
+              bathrooms: '1',
+              size: { value: 402, unit: 'sqft' },
+              property_type: 'Apartment',
+              offering_type: 'Residential for Sale',
+              completion_status: 'completed',
+              location: {
+                name: 'Golf Views Seven City',
+                full_name: 'Golf Views Seven City, JLT Cluster Z, Jumeirah Lake Towers, Dubai',
+                coordinates: { lat: 25.0791, lon: 55.1538 },
+                building_details: { developer_name: 'SEVEN TIDES', swimming_pools: 4 },
+              },
+              location_tree: [
+                { name: 'Dubai', type: 'CITY' },
+                { name: 'Jumeirah Lake Towers', type: 'COMMUNITY' },
+                { name: 'JLT Cluster Z', type: 'SUBCOMMUNITY' },
+                { name: 'Golf Views Seven City', type: 'TOWER' },
+              ],
+              rera: {
+                issued_license_number: '718828',
+                permit_validation_url: 'https://trakheesi.dubailand.gov.ae/rev/madmoun/listing/validation?k=abc',
+              },
+              images: {
+                property: [
+                  { full: 'https://static.shared.propertyfinder.ae/media/1/1312x894.jpg' },
+                  { full: 'https://static.shared.propertyfinder.ae/media/2/1312x894.jpg' },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+    const html = `<html><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(pfNextData)}</script></body></html>`;
+    const res = parseListingHtml(
+      html,
+      'https://www.propertyfinder.ae/en/plp/buy/apartment-for-sale-dubai-jumeirah-lake-towers-jlt-cluster-z-golf-views-seven-city-177814401.html'
+    );
+
+    expect(res.extractionMode).toBe('next_data');
+    expect(res.price).toBe(530000);
+    expect(res.bedrooms).toBe(0);
+    expect(res.areaSqft).toBe(402);
+    expect(res.community).toContain('Jumeirah Lake Towers');
+    expect(res.buildingName).toBe('Golf Views Seven City');
+    expect(res.madmounQrUrl).toContain('trakheesi.dubailand.gov.ae');
+    expect(res.imageUrls).toHaveLength(2);
+
+    const storyboard = generatePropertyStoryboard({
+      listing: res,
+      style: 'reels_vertical',
+      locale: 'en',
+    });
+    expect(storyboard.scenes[1].caption).toContain('Modern Studio');
+    expect(storyboard.scenes[1].caption).not.toContain('0 Beds');
+  });
 });

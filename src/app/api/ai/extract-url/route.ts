@@ -47,15 +47,16 @@ export async function POST(request: Request) {
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6500);
+    const timer = setTimeout(() => controller.abort(), 9000);
     const res = await fetch(targetUrl, {
       method: 'GET',
       redirect: 'follow',
       signal: controller.signal,
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (compatible; MakanReelBot/1.0; +https://ai-video-listing.vercel.app)',
-        Accept: 'text/html,application/xhtml+xml',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
       },
     });
     clearTimeout(timer);
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     if (!res.ok) {
       const fallback = buildSlugFallbackExtraction(
         targetUrl,
-        `Source site returned HTTP ${res.status} (anti-bot protection). Parsed key listing attributes from the URL — review or attach photos below.`
+        `Source portal returned HTTP ${res.status}. Extracted listing clues from the URL — verify specs or upload photos below.`
       );
       return NextResponse.json({ listing: fallback });
     }
@@ -77,13 +78,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ listing: fallback });
     }
 
-    const html = (await res.text()).slice(0, 350_000);
+    // Keep up to 1.8 MB so full Next.js __NEXT_DATA__ payloads (e.g., Property Finder / Bayut) are never truncated
+    const html = (await res.text()).slice(0, 1_800_000);
     const listing = parseListingHtml(html, targetUrl);
     return NextResponse.json({ listing });
   } catch {
     const fallback = buildSlugFallbackExtraction(
       targetUrl,
-      'Could not fetch live HTML within timeout (or host blocked automated fetch). Parsed listing clues from the URL — edit details or drop photos below.'
+      'Could not reach listing host within timeout. Parsed listing clues from the URL — edit specs or add photos below.'
     );
     return NextResponse.json({ listing: fallback });
   }
