@@ -7,6 +7,7 @@
     "explore": "Explore",
     "map": "Map",
     "record": "Record / Upload",
+    "aiStudio": "AI URL Studio",
     "reels": "Reels",
     "dashboard": "Dashboard",
     "present": "Present",
@@ -176,6 +177,7 @@
     "exit": "Exit Presentation",
     "fullscreen": "Fullscreen",
     "videoView": "Walkthrough Video",
+    "floorplanView": "3D Floor Plan",
     "mapView": "Location & Context",
     "unitMatrix": "Plot & Unit Availability Matrix",
     "unitCode": "Unit / Plot",
@@ -183,7 +185,7 @@
     "area": "Area",
     "price": "Price",
     "unitStatus": "Status",
-    "shortcuts": "Keys: F fullscreen · V video · M map · Esc exit"
+    "shortcuts": "Keys: F fullscreen · V video · B 3D floor plan · M map · Esc exit"
   },
   "dashboard": {
     "title": "Operations & Compliance Dashboard",
@@ -243,5 +245,42 @@
     "step3": "25–38s · Show kitchen, stone & appliance finishes",
     "step4": "38–50s · Primary suite & unobstructed view",
     "step5": "50–60s · Balcony / amenities & permit recap"
+  },
+  "floorplan": {
+    "title": "Interactive 3D Floor Plan & Spatial Explorer",
+    "mode3d": "3D Isometric",
+    "mode2d": "2D Blueprint",
+    "resetView": "Reset 3D camera",
+    "orbit": "Orbit",
+    "tilt": "Tilt"
+  },
+  "aiStudio": {
+    "badge": "Paste Listing URL → AI Property Video + 3D Floor Plan",
+    "title": "Turn Any Property Listing Link Into a DLD-Compliant Video Reel",
+    "subtitle": "Paste a Property Finder, Bayut, Dubizzle, or brokerage URL. Extract specs automatically, edit the bilingual storyboard, inspect the 3D floor plan, render with a burned-in Madmoun QR, and sync live to the portal.",
+    "urlPlaceholder": "https://propertyfinder.ae/... or any property listing URL",
+    "extractCta": "Extract & Build Video",
+    "extracting": "Extracting Listing…",
+    "trySample": "Instant UAE Samples:",
+    "samplePalm": "Palm Jumeirah 6BR Villa",
+    "sampleDowntown": "Downtown Burj Penthouse",
+    "sampleCreek": "Creek Harbour Off-Plan",
+    "extractedTitle": "Extracted Property Specifications",
+    "addPhotos": "Add Listing Photos (Optional)",
+    "photoHint": "Uses architectural motion backdrop if no photos attached",
+    "storyboardTitle": "AI Video Format & Editable 5-Scene Storyboard",
+    "styleWalkthrough": "Architectural Walkthrough",
+    "styleReels": "Vertical Social Reel",
+    "styleInvestor": "Investor Briefing",
+    "floorplanLinked": "Auto-Generated 3D Spatial Floor Plan",
+    "renderTitle": "AI Video Render & Live Sync",
+    "readyToRender": "Review your storyboard scenes and click Render AI Video to generate a playable video with a scannable DLD Madmoun QR overlay.",
+    "renderingStatus": "Rendering Ken Burns scenes & burning in DLD Madmoun QR…",
+    "renderCta": "Render AI Video",
+    "reRender": "Re-Render Video",
+    "downloadVideo": "Download Video",
+    "publishLiveCta": "Publish & Live-Sync to Portal",
+    "quickBarLabel": "Paste any property listing URL to auto-generate a DLD-verified AI video",
+    "quickBarCta": "Generate AI Video"
   }
 }

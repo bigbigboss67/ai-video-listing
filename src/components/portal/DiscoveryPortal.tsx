@@ -2,13 +2,14 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import {
   ArrowUpRight,
   Columns2,
   ExternalLink,
   Filter,
   LayoutGrid,
+  Link2,
   Map as MapIcon,
   MessageCircle,
   Presentation,
@@ -16,6 +17,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Sparkles,
   X,
 } from 'lucide-react';
 import type {
@@ -61,7 +63,9 @@ export function DiscoveryPortal({
 }: DiscoveryPortalProps) {
   const t = useTranslations();
   const locale = useLocale();
+  const router = useRouter();
   const { currency, theme } = useAppContext();
+  const [quickPasteUrl, setQuickPasteUrl] = useState('');
 
   const [properties, setProperties] =
     useState<PropertyWithVideos[]>(initialProperties);
@@ -404,6 +408,40 @@ export function DiscoveryPortal({
           </button>
         </div>
       ) : null}
+
+      {/* Quick Paste Listing URL -> AI Property Video Studio Strip */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const trimmed = quickPasteUrl.trim();
+          router.push(
+            trimmed
+              ? `/ai-studio?url=${encodeURIComponent(trimmed)}`
+              : '/ai-studio'
+          );
+        }}
+        className="mb-4 p-3 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
+      >
+        <div className="flex items-center gap-2 text-xs font-semibold text-[var(--accent-primary)] shrink-0">
+          <Sparkles className="w-4 h-4" />
+          <span className="hidden xl:inline">{t('aiStudio.quickBarLabel')}</span>
+          <span className="xl:hidden">{t('nav.aiStudio')}</span>
+        </div>
+        <div className="relative flex-1">
+          <Link2 className="w-3.5 h-3.5 text-[var(--text-muted)] absolute top-1/2 -translate-y-1/2 start-3" />
+          <input
+            type="url"
+            value={quickPasteUrl}
+            onChange={(e) => setQuickPasteUrl(e.target.value)}
+            placeholder={t('aiStudio.urlPlaceholder')}
+            aria-label={t('aiStudio.urlPlaceholder')}
+            className="w-full h-9 ps-9 pe-3 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-xs bidi-ltr"
+          />
+        </div>
+        <Button type="submit" variant="accent" size="sm" className="h-9 px-4 shrink-0">
+          {t('aiStudio.quickBarCta')}
+        </Button>
+      </form>
 
       {/* Style B: 3D Glass Card Coverflow Showcase */}
       <CoverflowReelShowcase

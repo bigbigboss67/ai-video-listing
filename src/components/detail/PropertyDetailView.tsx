@@ -27,6 +27,7 @@ import {
 } from '@/lib/format';
 import { AdaptiveVideoPlayer } from '@/components/video/AdaptiveVideoPlayer';
 import { ClusteredPropertyMap } from '@/components/map/ClusteredPropertyMap';
+import { InteractiveFloorPlan3D } from '@/components/floorplan/InteractiveFloorPlan3D';
 import { YieldCalculator } from '@/components/detail/YieldCalculator';
 import { verifyOnSiteCapture } from '@/lib/geo-verify';
 import { Button, MadmounQrCard, StatusPill } from '@/components/ui/Primitives';
@@ -298,6 +299,13 @@ export function PropertyDetailView({
               </div>
             ) : null}
           </section>
+
+          {/* Interactive 3D Isometric / 2D Architectural Floor Plan */}
+          <InteractiveFloorPlan3D
+            propertyType={property.propertyType}
+            areaSqft={property.areaSqft}
+            bedrooms={property.bedrooms}
+          />
 
           {/* Interactive UAE Mortgage, 4% DLD Fee & Net Rental Yield Calculator */}
           <YieldCalculator
