@@ -45,5 +45,11 @@ describe('Bilingual EN/AR Translation Key Integrity Regression', () => {
     expect(ar.calculator.title).toBeTruthy();
     expect(en.teleprompter.step1).toBeTruthy();
     expect(ar.teleprompter.step1).toBeTruthy();
+    expect(en.floorplan.title).toBeTruthy();
+    expect(ar.floorplan.title).toBeTruthy();
+    expect(en.aiStudio.title).toBeTruthy();
+    expect(ar.aiStudio.title).toBeTruthy();
+    expect(en.presentation.floorplanView).toBeTruthy();
+    expect(ar.presentation.floorplanView).toBeTruthy();
   });
 });

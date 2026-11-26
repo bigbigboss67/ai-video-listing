@@ -14,6 +14,7 @@ import {
   Moon,
   PlusCircle,
   Radio,
+  Sparkles,
   Sun,
 } from 'lucide-react';
 import { useAppContext } from '@/components/providers/AppProvider';
@@ -101,6 +102,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               }`}
             >
               {t('nav.explore')}
+            </Link>
+            <Link
+              href="/ai-studio"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] font-medium transition-colors ${
+                pathname.startsWith('/ai-studio')
+                  ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              {t('nav.aiStudio')}
             </Link>
             <Link
               href="/reels"

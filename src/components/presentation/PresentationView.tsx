@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/navigation';
 import {
   ArrowLeft,
+  Box,
   Film,
   Map as MapIcon,
   Maximize2,
@@ -14,6 +15,7 @@ import type { CurrencyCode, PropertyWithVideos } from '@/types/domain';
 import { useAppContext } from '@/components/providers/AppProvider';
 import { formatArea, formatCurrency } from '@/lib/format';
 import { AdaptiveVideoPlayer } from '@/components/video/AdaptiveVideoPlayer';
+import { InteractiveFloorPlan3D } from '@/components/floorplan/InteractiveFloorPlan3D';
 import { ClusteredPropertyMap } from '@/components/map/ClusteredPropertyMap';
 import { StatusPill } from '@/components/ui/Primitives';
 
@@ -27,7 +29,7 @@ export function PresentationView({
   const router = useRouter();
   const { currency, setCurrency } = useAppContext();
 
-  const [stageMode, setStageMode] = useState<'video' | 'map'>('video');
+  const [stageMode, setStageMode] = useState<'video' | 'floorplan' | 'map'>('video');
   const title = locale === 'ar' ? property.titleAr : property.titleEn;
   const primaryVideo = property.videos[0];
 
@@ -43,6 +45,7 @@ export function PresentationView({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'f' || e.key === 'F') requestFullscreen();
       if (e.key === 'v' || e.key === 'V') setStageMode('video');
+      if (e.key === 'b' || e.key === 'B') setStageMode('floorplan');
       if (e.key === 'm' || e.key === 'M') setStageMode('map');
       if (e.key === 'Escape' && !document.fullscreenElement) {
         router.push(`/properties/${property.slug}`);
@@ -86,6 +89,19 @@ export function PresentationView({
             >
               <Film className="w-3.5 h-3.5" />
               {t('presentation.videoView')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStageMode('floorplan')}
+              data-testid="present-stage-floorplan"
+              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-[4px] text-xs font-semibold cursor-pointer ${
+                stageMode === 'floorplan'
+                  ? 'bg-[#D4AF6A] text-[#0D0F12]'
+                  : 'text-[#A3ACBA] hover:text-white'
+              }`}
+            >
+              <Box className="w-3.5 h-3.5" />
+              {t('presentation.floorplanView')}
             </button>
             <button
               type="button"
@@ -140,6 +156,13 @@ export function PresentationView({
               captionsArUrl={primaryVideo?.captionsArUrl}
               locale={locale}
               autoPlay
+            />
+          ) : stageMode === 'floorplan' ? (
+            <InteractiveFloorPlan3D
+              propertyType={property.propertyType}
+              areaSqft={property.areaSqft}
+              bedrooms={property.bedrooms}
+              darkSurface
             />
           ) : (
             <ClusteredPropertyMap
