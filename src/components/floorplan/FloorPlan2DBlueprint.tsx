@@ -188,7 +188,7 @@ export function FloorPlan2DBlueprint({
   return (
     <svg
       viewBox={`0 0 ${vbW} ${vbH}`}
-      className="w-full h-full select-none"
+      className="absolute inset-0 w-full h-full select-none"
       role="img"
       aria-label="2D Architectural CAD Floor Plan Blueprint"
     >

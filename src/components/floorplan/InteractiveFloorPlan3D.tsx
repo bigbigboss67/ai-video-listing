@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   Box,
   Compass,
   Layers,
+  Maximize2,
   MoveHorizontal,
   RotateCcw,
   Ruler,
@@ -15,7 +16,7 @@ import type { PropertyType } from '@/types/domain';
 import { getFloorPlanForProperty } from '@/lib/floorplan-data';
 import { formatArea } from '@/lib/format';
 import { FloorPlan2DBlueprint } from './FloorPlan2DBlueprint';
-import { FloorPlan3DDollhouse } from './FloorPlan3DDollhouse';
+import { FloorPlan3DWebGL } from './FloorPlan3DWebGL';
 
 interface InteractiveFloorPlan3DProps {
   propertyType: PropertyType;
@@ -34,6 +35,7 @@ export function InteractiveFloorPlan3D({
 }: InteractiveFloorPlan3DProps) {
   const t = useTranslations('floorplan');
   const locale = useLocale();
+  const sectionRef = useRef<HTMLElement | null>(null);
 
   const plan = useMemo(
     () => getFloorPlanForProperty({ propertyType, areaSqft, bedrooms }),
@@ -41,8 +43,8 @@ export function InteractiveFloorPlan3D({
   );
 
   const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
-  const [orbitDeg, setOrbitDeg] = useState(38);
-  const [tiltDeg, setTiltDeg] = useState(52);
+  const [resetSignal, setResetSignal] = useState(0);
+  const [focusTrigger, setFocusTrigger] = useState(0);
   const [selectedRoomId, setSelectedRoomId] = useState<string>(
     plan.rooms[0]?.id ?? ''
   );
@@ -50,16 +52,32 @@ export function InteractiveFloorPlan3D({
   const activeRoom =
     plan.rooms.find((r) => r.id === selectedRoomId) ?? plan.rooms[0];
 
-  const resetCamera = () => {
-    setOrbitDeg(38);
-    setTiltDeg(52);
+  const handleSelectRoom = (id: string) => {
+    setSelectedRoomId(id);
+    setFocusTrigger((n) => n + 1);
+  };
+
+  const handleReset = () => {
     setViewMode('3d');
+    setFocusTrigger(0);
+    setResetSignal((n) => n + 1);
+  };
+
+  const handleFullscreen = () => {
+    const el = sectionRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
   };
 
   return (
     <section
+      ref={sectionRef}
       data-testid="interactive-floorplan-3d"
-      className={`rounded-[8px] border overflow-hidden ${
+      className={`rounded-[8px] border overflow-hidden flex flex-col ${
         darkSurface
           ? 'border-[#262E3B] bg-[#151920] text-[#F4F5F7]'
           : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]'
@@ -122,19 +140,32 @@ export function InteractiveFloorPlan3D({
 
           <button
             type="button"
-            onClick={resetCamera}
+            onClick={handleReset}
             aria-label={t('resetView')}
+            title={t('resetView')}
             className="w-8 h-8 rounded-[6px] border border-[var(--border-subtle)] flex items-center justify-center hover:bg-[var(--bg-elevated)] cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
+
+          <button
+            type="button"
+            onClick={handleFullscreen}
+            aria-label="Expand fullscreen floor plan"
+            title="Expand fullscreen"
+            className="w-8 h-8 rounded-[6px] border border-[var(--border-subtle)] flex items-center justify-center hover:bg-[var(--bg-elevated)] cursor-pointer"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
-      {/* Unobstructed 3D Dollhouse or 2D CAD Blueprint Canvas */}
+      {/* Full-Scale Unobstructed 3D WebGL Dollhouse OR 2D CAD Blueprint Canvas */}
       <div
-        className={`relative w-full bg-[#0B1018] overflow-hidden ${
-          compact ? 'h-72 sm:h-80' : 'h-80 sm:h-[420px]'
+        className={`relative w-full bg-[#131822] overflow-hidden flex-1 ${
+          compact
+            ? 'min-h-[380px] sm:min-h-[440px] h-[380px] sm:h-[440px]'
+            : 'min-h-[440px] sm:min-h-[520px] h-[440px] sm:h-[520px]'
         }`}
       >
         <div className="absolute top-3 start-3 z-10 flex items-center gap-2 px-2.5 py-1 rounded-[4px] bg-black/75 border border-[#262E3B] text-[11px] font-mono-code text-[#D4AF6A] bidi-ltr pointer-events-none">
@@ -144,67 +175,98 @@ export function InteractiveFloorPlan3D({
           <span>{Math.round(plan.totalSqft * 0.0929)} m²</span>
         </div>
 
+        {/* Live "Where You Are" Active Room Indicator + Instant Full-View Reset */}
+        {viewMode === '3d' && activeRoom ? (
+          <div className="absolute top-3 end-3 z-10 flex items-center gap-1.5">
+            <div
+              data-testid="floorplan-active-hud"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-black/80 border border-[#D4AF6A]/60 text-[11px] font-semibold text-[#F8FAFC] shadow-sm pointer-events-none"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#D4AF6A] animate-pulse" />
+              <span className="max-w-[190px] truncate">
+                {focusTrigger > 0
+                  ? `${locale === 'ar' ? 'العرض:' : 'Viewing:'} ${
+                      locale === 'ar' ? activeRoom.nameAr : activeRoom.nameEn
+                    }`
+                  : locale === 'ar'
+                    ? 'نظرة عامة · اختر غرفة للتقريب'
+                    : 'Overview · Click any room to focus'}
+              </span>
+            </div>
+            {focusTrigger > 0 ? (
+              <button
+                type="button"
+                onClick={handleReset}
+                data-testid="floorplan-full-view-btn"
+                className="px-2 py-1 rounded-[4px] bg-[#D4AF6A] hover:bg-[#C49B50] text-[#11161F] text-[11px] font-bold cursor-pointer transition-colors"
+              >
+                {locale === 'ar' ? 'عرض كامل' : 'Full View'}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {viewMode === '3d' ? (
-          <FloorPlan3DDollhouse
+          <div className="absolute bottom-3 end-3 z-10 px-2.5 py-1 rounded-[4px] bg-black/70 border border-[#262E3B] text-[11px] text-[#CBD5E1] inline-flex items-center gap-1.5 pointer-events-none">
+            <MoveHorizontal className="w-3.5 h-3.5 text-[#D4AF6A]" />
+            <span>Drag to orbit 360° · Scroll to zoom · Click any room</span>
+          </div>
+        ) : null}
+
+        {viewMode === '3d' ? (
+          <FloorPlan3DWebGL
             plan={plan}
             activeRoomId={activeRoom?.id ?? ''}
-            orbitDeg={orbitDeg}
-            tiltDeg={tiltDeg}
-            locale={locale}
-            onOrbitChange={setOrbitDeg}
-            onSelectRoom={setSelectedRoomId}
+            focusTrigger={focusTrigger}
+            resetSignal={resetSignal}
+            onSelectRoom={handleSelectRoom}
+            onWebglFallback={() => setViewMode('2d')}
           />
         ) : (
           <FloorPlan2DBlueprint
             plan={plan}
             activeRoomId={activeRoom?.id ?? ''}
             locale={locale}
-            onSelectRoom={setSelectedRoomId}
+            onSelectRoom={handleSelectRoom}
           />
         )}
       </div>
 
-      {/* Dedicated Non-Overlapping 3D Camera Control Bar */}
-      {viewMode === '3d' ? (
-        <div
-          className={`px-4 py-2.5 border-t flex flex-wrap items-center justify-between gap-3 text-[11px] ${
-            darkSurface
-              ? 'border-[#262E3B] bg-[#0F131A] text-[#CBD5E1]'
-              : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)]'
-          }`}
-        >
-          <span className="inline-flex items-center gap-1.5 font-medium text-[var(--accent-primary)]">
-            <MoveHorizontal className="w-3.5 h-3.5" />
-            <span>360° Interactive Dollhouse (drag to rotate)</span>
-          </span>
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2">
-              <span>
-                {t('orbit')} ({orbitDeg}°)
+      {/* Clean Non-Blocking Room Selector Strip (replaces giant floating overlays!) */}
+      <div
+        className={`px-3 py-2.5 border-t flex flex-wrap items-center gap-1.5 ${
+          darkSurface
+            ? 'border-[#262E3B] bg-[#0F131A]'
+            : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)]'
+        }`}
+      >
+        {plan.rooms.map((room, idx) => {
+          const active = room.id === activeRoom?.id;
+          return (
+            <button
+              key={room.id}
+              type="button"
+              data-testid={`floorplan-room-${room.id}`}
+              onClick={() => handleSelectRoom(room.id)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-[6px] text-xs font-medium border transition-colors cursor-pointer ${
+                active
+                  ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]'
+                  : darkSurface
+                    ? 'bg-[#151920] text-[#CBD5E1] border-[#262E3B] hover:border-[#D4AF6A]'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)]'
+              }`}
+            >
+              <span className="font-mono-code text-[10px] opacity-80">
+                0{idx + 1}
               </span>
-              <input
-                type="range"
-                min={0}
-                max={355}
-                value={orbitDeg}
-                onChange={(e) => setOrbitDeg(Number(e.target.value))}
-                className="w-24 accent-[var(--accent-primary)]"
-              />
-            </label>
-            <label className="flex items-center gap-2">
-              <span>{t('tilt')}</span>
-              <input
-                type="range"
-                min={28}
-                max={68}
-                value={tiltDeg}
-                onChange={(e) => setTiltDeg(Number(e.target.value))}
-                className="w-24 accent-[var(--accent-primary)]"
-              />
-            </label>
-          </div>
-        </div>
-      ) : null}
+              <span>{locale === 'ar' ? room.nameAr : room.nameEn}</span>
+              <span className="font-mono-code text-[10px] opacity-80 bidi-ltr">
+                {room.areaSqft} ft²
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Selected Room Architectural Inspector */}
       {activeRoom ? (

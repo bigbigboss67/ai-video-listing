@@ -57,6 +57,7 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
   const [orderedPhotos, setOrderedPhotos] = useState<string[]>([]);
   const [excludedPhotos, setExcludedPhotos] = useState<Record<string, boolean>>({});
   const [includeMusic, setIncludeMusic] = useState(true);
+  const [autoSpeakOnPlay, setAutoSpeakOnPlay] = useState(true);
   const [speakingVoiceover, setSpeakingVoiceover] = useState(false);
 
   // Storyboard & style state
@@ -794,16 +795,34 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                     poster={rendered.posterDataUrl}
                     controls
                     playsInline
+                    onPlay={() => {
+                      if (autoSpeakOnPlay && !speakingVoiceover) {
+                        handleToggleVoiceoverPreview();
+                      }
+                    }}
+                    onPause={() => {
+                      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        setSpeakingVoiceover(false);
+                      }
+                    }}
+                    onEnded={() => {
+                      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        setSpeakingVoiceover(false);
+                      }
+                    }}
                     className={`w-full rounded-[6px] bg-black border border-[var(--border-subtle)] ${
                       storyboard?.aspectRatio === '9:16'
                         ? 'max-h-[420px] object-contain'
                         : 'aspect-video object-cover'
                     }`}
                   />
-                  <div className="flex items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
                     <span className="font-mono-code bidi-ltr">
                       {(rendered.file.size / 1024).toFixed(0)} KB · {rendered.durationSec}s ·{' '}
                       {rendered.photosUsedCount} real photos
+                      {rendered.hasAudioTrack ? ' · Music' : ''}
                     </span>
                     <a
                       href={rendered.previewUrl}
@@ -831,34 +850,53 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                 </div>
               )}
 
-              {/* Audio Controls: Ambient Luxury Soundtrack + EN/AR Voiceover Preview */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-xs">
-                <label className="inline-flex items-center gap-2 cursor-pointer font-medium">
-                  <input
-                    type="checkbox"
-                    checked={includeMusic}
-                    onChange={(e) => setIncludeMusic(e.target.checked)}
-                    className="w-4 h-4 accent-[var(--accent-primary)]"
-                  />
-                  <Music className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                  <span>Ambient Soundtrack ($0)</span>
-                </label>
+              {/* Audio Controls: Ambient Luxury Soundtrack + Synced EN/AR Voiceover */}
+              <div className="p-3 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] space-y-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="inline-flex items-center gap-2 cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      checked={includeMusic}
+                      onChange={(e) => setIncludeMusic(e.target.checked)}
+                      className="w-4 h-4 accent-[var(--accent-primary)]"
+                    />
+                    <Music className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    <span>Ambient Soundtrack ($0)</span>
+                  </label>
 
-                <button
-                  type="button"
-                  onClick={handleToggleVoiceoverPreview}
-                  data-testid="ai-voiceover-btn"
-                  className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-[4px] border border-[var(--border-strong)] bg-[var(--bg-surface)] hover:bg-[var(--bg-canvas)] text-[11px] font-semibold cursor-pointer"
-                >
-                  {speakingVoiceover ? (
-                    <VolumeX className="w-3.5 h-3.5 text-[var(--status-danger)]" />
-                  ) : (
-                    <Volume2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                  )}
-                  <span>
-                    {speakingVoiceover ? 'Stop Voiceover' : `Preview ${scriptLocale.toUpperCase()} Voiceover`}
+                  <label className="inline-flex items-center gap-2 cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      checked={autoSpeakOnPlay}
+                      onChange={(e) => setAutoSpeakOnPlay(e.target.checked)}
+                      className="w-4 h-4 accent-[var(--accent-primary)]"
+                    />
+                    <span>Sync {scriptLocale.toUpperCase()} Voiceover on Play</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
+                  <span className="text-[11px] text-[var(--text-muted)] line-clamp-1">
+                    {storyboard?.scenes[0]?.narration}
                   </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleVoiceoverPreview}
+                    data-testid="ai-voiceover-btn"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-[4px] border border-[var(--border-strong)] bg-[var(--bg-surface)] hover:bg-[var(--bg-canvas)] text-[11px] font-semibold cursor-pointer"
+                  >
+                    {speakingVoiceover ? (
+                      <VolumeX className="w-3.5 h-3.5 text-[var(--status-danger)]" />
+                    ) : (
+                      <Volume2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    )}
+                    <span>
+                      {speakingVoiceover
+                        ? 'Stop Voiceover'
+                        : `Play ${scriptLocale.toUpperCase()} Voiceover`}
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <Button

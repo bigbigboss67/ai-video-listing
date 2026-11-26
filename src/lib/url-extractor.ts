@@ -644,6 +644,12 @@ export function generatePropertyStoryboard(params: {
 
   const baseDuration = 2.6;
 
+  const cleanTitleForSpeech = listing.buildingName
+    ? listing.titleEn
+        .replace(new RegExp(`^${listing.buildingName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[—–-]?\\s*`, 'i'), '')
+        .trim() || listing.titleEn
+    : listing.titleEn;
+
   const scenes: StoryboardScene[] = isAr
     ? [
         {
@@ -652,7 +658,7 @@ export function generatePropertyStoryboard(params: {
           label: 'المشهد 1 · الافتتاحية',
           headline: listing.buildingName || listing.community,
           caption: listing.titleAr || listing.titleEn,
-          narration: `اكتشف فرصة استثمارية مميزة في ${listing.community} — ${listing.titleAr || listing.titleEn}.`,
+          narration: `اكتشف فرصة استثمارية مميزة في ${listing.community}. ${listing.titleAr || listing.titleEn}.`,
           durationSec: baseDuration,
           motion: 'zoom-in',
           imageUrl: pickImg(0),
@@ -708,8 +714,8 @@ export function generatePropertyStoryboard(params: {
           index: 0,
           label: 'Scene 1 · Property Hook',
           headline: listing.buildingName || listing.community,
-          caption: listing.titleEn,
-          narration: `Step inside ${listing.buildingName || listing.community} — ${listing.titleEn}.`,
+          caption: cleanTitleForSpeech,
+          narration: `Welcome to ${listing.buildingName || listing.community}. ${cleanTitleForSpeech}.`,
           durationSec: baseDuration,
           motion: 'zoom-in',
           imageUrl: pickImg(0),
