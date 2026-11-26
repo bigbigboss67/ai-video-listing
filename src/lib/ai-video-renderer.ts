@@ -9,6 +9,94 @@ export interface RenderedAiVideo {
   posterDataUrl: string;
   durationSec: number;
   photosUsedCount: number;
+  hasAudioTrack: boolean;
+}
+
+/**
+ * Synthesizes a warm, copyright-free luxury ambient architectural soundtrack
+ * (Cmaj9 -> Am9 -> Fmaj7 -> G6) using WebAudio and routes it to a MediaStreamTrack
+ * so the rendered property video includes smooth background audio at $0 cost.
+ */
+function createLuxuryAmbientAudio(totalDurationMs: number): {
+  track: MediaStreamTrack | null;
+  stop: () => void;
+} {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return { track: null, stop: () => {} };
+
+    const ctx = new AudioCtx();
+    const dest = ctx.createMediaStreamDestination();
+    const master = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1150;
+
+    const now = ctx.currentTime;
+    const totalSec = totalDurationMs / 1000;
+    master.gain.setValueAtTime(0.001, now);
+    master.gain.linearRampToValueAtTime(0.14, now + 0.9);
+    master.gain.setValueAtTime(0.14, Math.max(now + 1.0, now + totalSec - 1.2));
+    master.gain.linearRampToValueAtTime(0.001, now + totalSec);
+
+    filter.connect(master);
+    master.connect(dest);
+
+    // Warm architectural chord progression (Hz)
+    const chords = [
+      [261.63, 329.63, 392.0, 493.88, 587.33], // Cmaj9
+      [220.0, 261.63, 329.63, 392.0, 493.88],  // Am9
+      [174.61, 220.0, 261.63, 329.63, 392.0],  // Fmaj9
+      [196.0, 246.94, 293.66, 329.63, 440.0],  // G6/9
+    ];
+
+    const oscs: OscillatorNode[] = [];
+    const chordLen = Math.max(2.2, totalSec / chords.length);
+
+    chords.forEach((notes, chordIdx) => {
+      const start = now + chordIdx * chordLen;
+      const end = Math.min(now + totalSec + 0.1, start + chordLen + 0.35);
+      if (start >= now + totalSec) return;
+
+      notes.forEach((freq, nIdx) => {
+        const osc = ctx.createOscillator();
+        const noteGain = ctx.createGain();
+        osc.type = nIdx === 0 ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(freq, start);
+
+        const peak = nIdx === 0 ? 0.24 : 0.12;
+        noteGain.gain.setValueAtTime(0.0001, start);
+        noteGain.gain.linearRampToValueAtTime(peak, start + 0.45);
+        noteGain.gain.exponentialRampToValueAtTime(0.0008, end);
+
+        osc.connect(noteGain);
+        noteGain.connect(filter);
+        osc.start(start);
+        osc.stop(end + 0.05);
+        oscs.push(osc);
+      });
+    });
+
+    const track = dest.stream.getAudioTracks()[0] ?? null;
+    return {
+      track,
+      stop: () => {
+        oscs.forEach((o) => {
+          try {
+            o.stop();
+          } catch {
+            // Already stopped
+          }
+        });
+        ctx.close().catch(() => {});
+      },
+    };
+  } catch {
+    return { track: null, stop: () => {} };
+  }
 }
 
 export function toRenderableImageUrl(rawUrl?: string): string | null {
@@ -182,6 +270,7 @@ export async function renderAiPropertyVideo(params: {
   priceBadge?: string;
   specsBadge?: string;
   localImages?: string[];
+  includeMusic?: boolean;
   onProgress?: (pct: number) => void;
 }): Promise<RenderedAiVideo> {
   const {
@@ -192,6 +281,7 @@ export async function renderAiPropertyVideo(params: {
     priceBadge,
     specsBadge,
     localImages = [],
+    includeMusic = true,
     onProgress,
   } = params;
 
@@ -368,24 +458,24 @@ export async function renderAiPropertyVideo(params: {
     const maxTextW = cardW - 56;
     ctx.textAlign = isRtl ? 'right' : 'left';
 
-    // Scene Label
+    // Scene Label (generous top breathing room)
     ctx.fillStyle = '#D4AF6A';
     ctx.font = `700 ${isVertical ? 13 : 13}px monospace`;
-    ctx.fillText(scene.label.toUpperCase(), innerAnchorX, cardY + 34);
+    ctx.fillText(scene.label.toUpperCase(), innerAnchorX, cardY + 38);
 
     // Headline
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `700 ${isVertical ? 34 : 36}px sans-serif`;
     const headlineLines = wrapText(ctx, scene.headline, maxTextW, 2);
     headlineLines.forEach((line, idx) => {
-      ctx.fillText(line, innerAnchorX, cardY + 74 + idx * (isVertical ? 40 : 42));
+      ctx.fillText(line, innerAnchorX, cardY + 78 + idx * (isVertical ? 40 : 42));
     });
 
     // Caption
-    ctx.fillStyle = '#D1D5DB';
-    ctx.font = `500 ${isVertical ? 19 : 19}px sans-serif`;
+    ctx.fillStyle = '#E5E7EB';
+    ctx.font = `500 ${isVertical ? 18 : 19}px sans-serif`;
     const captionLines = wrapText(ctx, scene.caption, maxTextW, 2);
-    const captionY = cardY + 74 + headlineLines.length * (isVertical ? 40 : 42) + 8;
+    const captionY = cardY + 78 + headlineLines.length * (isVertical ? 40 : 42) + 8;
     captionLines.forEach((line, idx) => {
       ctx.fillText(line, innerAnchorX, captionY + idx * 25);
     });
@@ -417,11 +507,32 @@ export async function renderAiPropertyVideo(params: {
       : '';
 
   if (preferredMime && typeof canvas.captureStream === 'function') {
-    const stream = canvas.captureStream(fps);
-    const recorder = new MediaRecorder(stream, {
-      mimeType: preferredMime,
-      videoBitsPerSecond: 4_200_000,
-    });
+    const videoStream = canvas.captureStream(fps);
+    const ambient = includeMusic
+      ? createLuxuryAmbientAudio(totalRenderMs)
+      : { track: null, stop: () => {} };
+
+    const combinedStream = ambient.track
+      ? new MediaStream([...videoStream.getVideoTracks(), ambient.track])
+      : videoStream;
+
+    let recorder: MediaRecorder;
+    let hasAudioTrack = Boolean(ambient.track);
+    try {
+      recorder = new MediaRecorder(combinedStream, {
+        mimeType: preferredMime,
+        videoBitsPerSecond: 4_200_000,
+      });
+    } catch {
+      // Fallback cleanly to video-only track if codec rejects Opus audio
+      ambient.stop();
+      hasAudioTrack = false;
+      recorder = new MediaRecorder(videoStream, {
+        mimeType: preferredMime,
+        videoBitsPerSecond: 4_200_000,
+      });
+    }
+
     const chunks: Blob[] = [];
     recorder.ondataavailable = (ev) => {
       if (ev.data.size > 0) chunks.push(ev.data);
@@ -443,7 +554,8 @@ export async function renderAiPropertyVideo(params: {
 
       recorder.onstop = () => {
         window.clearInterval(timer);
-        stream.getTracks().forEach((tr) => tr.stop());
+        videoStream.getTracks().forEach((tr) => tr.stop());
+        ambient.stop();
         onProgress?.(100);
         resolve(new Blob(chunks, { type: preferredMime.split(';')[0] }));
       };
@@ -462,6 +574,7 @@ export async function renderAiPropertyVideo(params: {
       posterDataUrl,
       durationSec: Math.round(totalRenderMs / 1000),
       photosUsedCount: validPool.length,
+      hasAudioTrack,
     };
   }
 
@@ -477,5 +590,6 @@ export async function renderAiPropertyVideo(params: {
     posterDataUrl,
     durationSec: Math.round(storyboard.totalDurationSec),
     photosUsedCount: validPool.length,
+    hasAudioTrack: false,
   };
 }

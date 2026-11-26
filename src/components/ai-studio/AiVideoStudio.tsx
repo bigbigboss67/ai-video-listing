@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import {
+  ArrowLeft,
+  ArrowRight,
   Box,
   CheckCircle2,
   Download,
@@ -11,10 +13,13 @@ import {
   ImagePlus,
   Link2,
   Loader2,
+  Music,
   Radio,
   ShieldCheck,
   Sparkles,
   Upload,
+  Volume2,
+  VolumeX,
   Wand2,
 } from 'lucide-react';
 import type {
@@ -49,6 +54,10 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
   const [extractError, setExtractError] = useState<string | null>(null);
   const [listing, setListing] = useState<ExtractedListingData | null>(null);
   const [localPhotoUrls, setLocalPhotoUrls] = useState<string[]>([]);
+  const [orderedPhotos, setOrderedPhotos] = useState<string[]>([]);
+  const [excludedPhotos, setExcludedPhotos] = useState<Record<string, boolean>>({});
+  const [includeMusic, setIncludeMusic] = useState(true);
+  const [speakingVoiceover, setSpeakingVoiceover] = useState(false);
 
   // Storyboard & style state
   const [videoStyle, setVideoStyle] = useState<AiVideoStyle>('walkthrough');
@@ -123,6 +132,8 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
       const extracted = json.listing as ExtractedListingData;
       setUrlInput(extracted.sourceUrl);
       setListing(extracted);
+      setOrderedPhotos(extracted.imageUrls ?? []);
+      setExcludedPhotos({});
       await generateScriptForListing(extracted, videoStyle, scriptLocale);
     } catch {
       setExtractError('Network error while extracting listing URL.');
@@ -157,6 +168,43 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
       .slice(0, 6)
       .map((f) => URL.createObjectURL(f));
     setLocalPhotoUrls((prev) => [...prev, ...urls].slice(0, 6));
+    setOrderedPhotos((prev) => [...urls, ...prev].slice(0, 12));
+  };
+
+  const activeSelectedPhotos = orderedPhotos.filter((u) => !excludedPhotos[u]);
+
+  const movePhoto = (idx: number, dir: -1 | 1) => {
+    setOrderedPhotos((prev) => {
+      const target = idx + dir;
+      if (target < 0 || target >= prev.length) return prev;
+      const copy = [...prev];
+      [copy[idx], copy[target]] = [copy[target], copy[idx]];
+      return copy;
+    });
+  };
+
+  const togglePhotoIncluded = (url: string) => {
+    setExcludedPhotos((prev) => ({ ...prev, [url]: !prev[url] }));
+  };
+
+  const handleToggleVoiceoverPreview = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || !storyboard) {
+      return;
+    }
+    if (speakingVoiceover) {
+      window.speechSynthesis.cancel();
+      setSpeakingVoiceover(false);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const fullText = storyboard.scenes.map((s) => s.narration).join(' ');
+    const utter = new SpeechSynthesisUtterance(fullText);
+    utter.lang = scriptLocale === 'ar' ? 'ar-AE' : 'en-US';
+    utter.rate = 0.98;
+    utter.onend = () => setSpeakingVoiceover(false);
+    utter.onerror = () => setSpeakingVoiceover(false);
+    setSpeakingVoiceover(true);
+    window.speechSynthesis.speak(utter);
   };
 
   const handleRenderVideo = async () => {
@@ -176,7 +224,11 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
         brandName: t('brand.name'),
         priceBadge,
         specsBadge,
-        localImages: localPhotoUrls,
+        localImages:
+          activeSelectedPhotos.length > 0
+            ? activeSelectedPhotos
+            : localPhotoUrls,
+        includeMusic,
         onProgress: (pct) => setRenderPct(pct),
       });
       setRendered(output);
@@ -496,32 +548,70 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                 </div>
               </div>
 
-              {/* Real Extracted & Uploaded Photo Gallery Strip */}
-              {(listing.imageUrls.length > 0 || localPhotoUrls.length > 0) ? (
+              {/* Interactive Photo Picker & Scene Order Strip */}
+              {orderedPhotos.length > 0 ? (
                 <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]" data-testid="ai-extracted-photos">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-secondary)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-[var(--text-secondary)]">
                     <span>
-                      Media Scenes Loaded ({localPhotoUrls.length + listing.imageUrls.length} real photos)
+                      Photo Picker & Scene Order ({activeSelectedPhotos.length}/{orderedPhotos.length} selected)
                     </span>
-                    <span className="text-[var(--status-live)]">Same-Origin CORS Proxy Active</span>
+                    <span className="text-[var(--status-live)]">
+                      Click to toggle · Use arrows to reorder scenes
+                    </span>
                   </div>
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                    {[...localPhotoUrls, ...listing.imageUrls].slice(0, 12).map((rawUrl, idx) => {
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {orderedPhotos.slice(0, 10).map((rawUrl, idx) => {
                       const src = toRenderableImageUrl(rawUrl) || rawUrl;
+                      const isExcluded = Boolean(excludedPhotos[rawUrl]);
+                      const activeRank = activeSelectedPhotos.indexOf(rawUrl);
                       return (
                         <div
                           key={`${rawUrl}-${idx}`}
-                          className="relative aspect-[4/3] rounded-[4px] overflow-hidden border border-[var(--border-subtle)] bg-[#0D0F12]"
+                          className={`relative rounded-[6px] overflow-hidden border transition-opacity ${
+                            isExcluded
+                              ? 'opacity-40 border-[var(--border-subtle)]'
+                              : 'border-[var(--accent-primary)]'
+                          } bg-[#0D0F12]`}
                         >
-                          <img
-                            src={src}
-                            alt={`Scene ${idx + 1}`}
-                            loading="lazy"
-                            className="w-full h-full object-cover"
-                          />
-                          <span className="absolute bottom-1 start-1 px-1 py-0.5 rounded bg-black/75 text-[9px] font-mono-code text-white">
-                            #{idx + 1}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => togglePhotoIncluded(rawUrl)}
+                            aria-label={`Toggle photo ${idx + 1}`}
+                            className="block w-full aspect-[4/3] cursor-pointer"
+                          >
+                            <img
+                              src={src}
+                              alt={`Scene ${idx + 1}`}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                          {!isExcluded && activeRank >= 0 && activeRank < 5 ? (
+                            <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded bg-[var(--accent-primary)] text-[9px] font-mono-code font-bold text-white">
+                              S{activeRank + 1}
+                            </span>
+                          ) : null}
+                          <div className="flex items-center justify-between px-1 py-0.5 bg-black/80 text-white">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => movePhoto(idx, -1)}
+                              aria-label="Move photo earlier"
+                              className="p-0.5 disabled:opacity-30 cursor-pointer"
+                            >
+                              <ArrowLeft className="w-3 h-3" />
+                            </button>
+                            <span className="text-[9px] font-mono-code">#{idx + 1}</span>
+                            <button
+                              type="button"
+                              disabled={idx === orderedPhotos.length - 1}
+                              onClick={() => movePhoto(idx, 1)}
+                              aria-label="Move photo later"
+                              className="p-0.5 disabled:opacity-30 cursor-pointer"
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -740,6 +830,36 @@ export function AiVideoStudio({ initialUrl = '' }: { initialUrl?: string }) {
                   </p>
                 </div>
               )}
+
+              {/* Audio Controls: Ambient Luxury Soundtrack + EN/AR Voiceover Preview */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-[6px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-xs">
+                <label className="inline-flex items-center gap-2 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={includeMusic}
+                    onChange={(e) => setIncludeMusic(e.target.checked)}
+                    className="w-4 h-4 accent-[var(--accent-primary)]"
+                  />
+                  <Music className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                  <span>Ambient Soundtrack ($0)</span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleToggleVoiceoverPreview}
+                  data-testid="ai-voiceover-btn"
+                  className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-[4px] border border-[var(--border-strong)] bg-[var(--bg-surface)] hover:bg-[var(--bg-canvas)] text-[11px] font-semibold cursor-pointer"
+                >
+                  {speakingVoiceover ? (
+                    <VolumeX className="w-3.5 h-3.5 text-[var(--status-danger)]" />
+                  ) : (
+                    <Volume2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                  )}
+                  <span>
+                    {speakingVoiceover ? 'Stop Voiceover' : `Preview ${scriptLocale.toUpperCase()} Voiceover`}
+                  </span>
+                </button>
+              </div>
 
               <Button
                 type="button"
