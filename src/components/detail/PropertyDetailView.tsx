@@ -30,6 +30,7 @@ import { ClusteredPropertyMap } from '@/components/map/ClusteredPropertyMap';
 import { InteractiveFloorPlan3D } from '@/components/floorplan/InteractiveFloorPlan3D';
 import { YieldCalculator } from '@/components/detail/YieldCalculator';
 import { verifyOnSiteCapture } from '@/lib/geo-verify';
+import { isUsablePhone, propertyHasBrokerDetails } from '@/lib/broker';
 import { Button, MadmounQrCard, StatusPill } from '@/components/ui/Primitives';
 
 export function PropertyDetailView({
@@ -117,6 +118,9 @@ export function PropertyDetailView({
     typeof window !== 'undefined'
       ? window.location.href
       : `https://makanreel.ae/${locale}/properties/${property.slug}`;
+
+  const brokerComplete = propertyHasBrokerDetails(property);
+  const hasWhatsapp = isUsablePhone(property.agentWhatsapp);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-5 py-5 space-y-6">
@@ -236,9 +240,15 @@ export function PropertyDetailView({
                 <div className="text-[11px] text-[var(--text-muted)]">
                   {t('listing.estYield')}
                 </div>
-                <div className="text-base font-bold tabular-nums mt-0.5 text-[var(--status-live)]">
-                  {property.estNetYieldPct ? `${property.estNetYieldPct}%` : '—'}
-                </div>
+                {property.estNetYieldPct != null ? (
+                  <div className="text-base font-bold tabular-nums mt-0.5 text-[var(--status-live)]">
+                    {property.estNetYieldPct}%
+                  </div>
+                ) : (
+                  <div className="text-sm font-medium mt-1 text-[var(--text-muted)]">
+                    {t('listing.notProvided')}
+                  </div>
+                )}
               </div>
               <div className="p-3 rounded-[6px] bg-[var(--bg-elevated)]">
                 <div className="text-[11px] text-[var(--text-muted)]">
@@ -252,11 +262,15 @@ export function PropertyDetailView({
                 <div className="text-[11px] text-[var(--text-muted)]">
                   {t('listing.serviceCharge')}
                 </div>
-                <div className="text-base font-bold tabular-nums mt-0.5">
-                  {property.serviceChargeAedSqft
-                    ? `${property.serviceChargeAedSqft} AED`
-                    : '—'}
-                </div>
+                {property.serviceChargeAedSqft != null ? (
+                  <div className="text-base font-bold tabular-nums mt-0.5">
+                    {property.serviceChargeAedSqft} AED
+                  </div>
+                ) : (
+                  <div className="text-sm font-medium mt-1 text-[var(--text-muted)]">
+                    {t('listing.notProvided')}
+                  </div>
+                )}
               </div>
               <div className="p-3 rounded-[6px] bg-[var(--bg-elevated)]">
                 <div className="text-[11px] text-[var(--text-muted)]">
@@ -268,14 +282,14 @@ export function PropertyDetailView({
               </div>
             </div>
 
-            {property.paymentPlan ? (
-              <div className="text-xs text-[var(--text-secondary)] pt-1">
-                <span className="font-semibold text-[var(--text-primary)]">
-                  {t('listing.paymentPlan')}:
-                </span>{' '}
-                {property.paymentPlan}
-              </div>
-            ) : null}
+            <div className="text-xs text-[var(--text-secondary)] pt-1">
+              <span className="font-semibold text-[var(--text-primary)]">
+                {t('listing.paymentPlan')}:
+              </span>{' '}
+              {property.paymentPlan || (
+                <span className="text-[var(--text-muted)]">{t('listing.notProvided')}</span>
+              )}
+            </div>
 
             {/* Off-Plan Mandatory DLD Escrow Disclosures */}
             {property.status === 'off_plan' && property.developerName ? (
@@ -287,13 +301,13 @@ export function PropertyDetailView({
                 <div>
                   <div className="text-[var(--text-muted)]">{t('listing.projectNumber')}</div>
                   <div className="font-mono-code font-semibold mt-0.5 bidi-ltr">
-                    {property.projectNumber || 'DLD-REG'}
+                    {property.projectNumber || t('listing.notProvided')}
                   </div>
                 </div>
                 <div>
                   <div className="text-[var(--text-muted)]">{t('listing.escrow')}</div>
                   <div className="font-mono-code font-semibold mt-0.5 bidi-ltr truncate">
-                    {property.escrowAccount}
+                    {property.escrowAccount || t('listing.notProvided')}
                   </div>
                 </div>
               </div>
@@ -311,8 +325,7 @@ export function PropertyDetailView({
           <YieldCalculator
             priceAed={property.priceAed}
             areaSqft={property.areaSqft}
-            defaultGrossYieldPct={property.estNetYieldPct ? property.estNetYieldPct + 1.2 : 7.8}
-            serviceChargeAedSqft={property.serviceChargeAedSqft ?? 20}
+            serviceChargeAedSqft={property.serviceChargeAedSqft}
             currency={currency}
           />
 
@@ -378,17 +391,28 @@ export function PropertyDetailView({
                   <Building2 className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
                   {property.agentName}
                 </div>
-                <div className="text-[var(--text-secondary)] mt-0.5">
-                  {property.agentOrg}
-                </div>
-                <div className="font-mono-code text-[11px] text-[var(--text-muted)] mt-0.5 bidi-ltr">
-                  {property.agentOrn} · {property.agentBrn} · Listed {formatDate(property.createdAt, locale)}
-                </div>
+                {brokerComplete ? (
+                  <>
+                    <div className="text-[var(--text-secondary)] mt-0.5">
+                      {property.agentOrg}
+                    </div>
+                    <div className="font-mono-code text-[11px] text-[var(--text-muted)] mt-0.5 bidi-ltr">
+                      {property.agentOrn} · {property.agentBrn} · Listed {formatDate(property.createdAt, locale)}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[var(--status-warn)] mt-0.5 font-medium">
+                    {t('listing.brokerDetailsMissing')}
+                  </div>
+                )}
               </div>
-              <ShieldCheck className="w-5 h-5 text-[var(--status-live)] shrink-0" />
+              {brokerComplete ? (
+                <ShieldCheck className="w-5 h-5 text-[var(--status-live)] shrink-0" />
+              ) : null}
             </div>
 
-            {/* 1-Tap WhatsApp CTA */}
+            {/* 1-Tap WhatsApp CTA (only with the listing agent's own number) */}
+            {hasWhatsapp ? (
             <a
               href={buildWhatsAppUrl({
                 phone: property.agentWhatsapp,
@@ -405,6 +429,12 @@ export function PropertyDetailView({
               <MessageCircle className="w-4 h-4" />
               {t('listing.whatsapp')}
             </a>
+            ) : (
+              <div className="w-full inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[6px] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm font-medium">
+                <MessageCircle className="w-4 h-4" />
+                {t('listing.whatsappUnavailable')}
+              </div>
+            )}
 
             {/* Priority Enquiry Form with Watch-Time Attribution */}
             <div className="pt-3 border-t border-[var(--border-subtle)]">

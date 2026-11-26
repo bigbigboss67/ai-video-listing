@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { canModerate, getCurrentSessionUser } from '@/lib/auth';
 import { apiError, zodApiError } from '@/lib/api-error';
+import { BrokerDetailsMissingError } from '@/lib/broker';
 import { moderateVideo } from '@/lib/store';
 import { moderationActionSchema } from '@/lib/validation';
 
@@ -30,7 +31,15 @@ export async function POST(
   }
 
   const { id } = await context.params;
-  const updated = moderateVideo(id, parsed.data.action, user, parsed.data.reason);
+  let updated;
+  try {
+    updated = moderateVideo(id, parsed.data.action, user, parsed.data.reason);
+  } catch (err) {
+    if (err instanceof BrokerDetailsMissingError) {
+      return apiError(422, 'BROKER_DETAILS_REQUIRED', err.message);
+    }
+    throw err;
+  }
   if (!updated) {
     return apiError(404, 'VIDEO_NOT_FOUND', `Video "${id}" was not found.`);
   }

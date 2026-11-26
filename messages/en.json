@@ -103,7 +103,10 @@
     "liveToastTitle": "New Video Live on Portal",
     "liveToastUploading": "Agent uploading live video",
     "liveToastAction": "Inspect",
-    "selectCardHint": "Select a listing to inspect specifications, compliance, and video preview."
+    "selectCardHint": "Select a listing to inspect specifications, compliance, and video preview.",
+    "notProvided": "Not provided",
+    "brokerDetailsMissing": "Broker details not provided",
+    "whatsappUnavailable": "WhatsApp not available"
   },
   "capture": {
     "title": "Mobile Capture & Upload Studio",
@@ -161,7 +164,19 @@
     "developerName": "Developer Name (Off-Plan)",
     "projectNumber": "DLD Project Number (Off-Plan)",
     "escrowAccount": "Escrow Account (Off-Plan)",
-    "description": "Description"
+    "description": "Description",
+    "estNetYield": "Est. Net Yield % (optional)",
+    "serviceCharge": "Service Charge, AED / sq ft (optional)",
+    "paymentPlan": "Payment Plan (optional)",
+    "optionalHint": "Leave blank if unknown. Blank fields show as \"Not provided\", never as an estimate.",
+    "brokerMissingTitle": "Add your broker details before publishing",
+    "brokerMissingBody": "Every listing must show your own brokerage, ORN, BRN and WhatsApp number. Ask an admin to add these to your account. Missing: {fields}.",
+    "brokerFields": {
+      "orgName": "Brokerage name",
+      "orn": "ORN",
+      "brn": "BRN",
+      "whatsappNumber": "WhatsApp number"
+    }
   },
   "enquiry": {
     "title": "Connect with Advisory Desk",
@@ -228,13 +243,16 @@
     "downPayment": "Down Payment",
     "interestRate": "Interest Rate (EIBOR+)",
     "tenure": "Tenure (Years)",
-    "grossYield": "Projected Gross Yield",
+    "grossYield": "Your Gross Yield Assumption",
     "monthlyPayment": "Est. Monthly Mortgage",
     "dldFee": "DLD Transfer Fee (4%)",
     "upfrontCash": "Total Upfront Capital",
     "netNoi": "Annual Net Operating Income",
     "netYield": "Projected Net Yield",
-    "disclaimer": "Indicative institutional estimate only. Not guaranteed return; subject to bank approval & DLD fees."
+    "disclaimer": "Indicative institutional estimate only. Not guaranteed return; subject to bank approval & DLD fees.",
+    "serviceChargeInput": "Service Charge (AED / sq ft)",
+    "serviceChargeMissing": "The agent has not provided a service charge. Enter one to see net income and net yield.",
+    "needsServiceCharge": "Enter service charge"
   },
   "teleprompter": {
     "title": "Guided 60s Shot Director",

@@ -17,6 +17,7 @@ import type { PropertyWithVideos, RealtimeEvent } from '@/types/domain';
 import { useAppContext } from '@/components/providers/AppProvider';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { buildWhatsAppUrl, formatArea, formatCurrency } from '@/lib/format';
+import { isUsablePhone } from '@/lib/broker';
 import { verifyOnSiteCapture } from '@/lib/geo-verify';
 import { AdaptiveVideoPlayer } from '@/components/video/AdaptiveVideoPlayer';
 import { StatusPill } from '@/components/ui/Primitives';
@@ -181,26 +182,28 @@ export function VerticalReelsFeed({
                       <Presentation className="w-3.5 h-3.5 text-[#D4AF6A]" />
                       {t('nav.present')}
                     </Link>
-                    <a
-                      href={buildWhatsAppUrl({
-                        phone: prop.agentWhatsapp,
-                        propertyTitle: title,
-                        permitNumber: prop.permitNumber,
-                        priceFormatted: formatCurrency(
-                          prop.priceAed,
-                          currency,
-                          locale
-                        ),
-                        url: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/properties/${prop.slug}`,
-                        locale,
-                      })}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center justify-center gap-1 h-10 rounded-[6px] bg-[#0F6E4A] text-white text-xs font-semibold"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      WhatsApp
-                    </a>
+                    {isUsablePhone(prop.agentWhatsapp) ? (
+                      <a
+                        href={buildWhatsAppUrl({
+                          phone: prop.agentWhatsapp,
+                          propertyTitle: title,
+                          permitNumber: prop.permitNumber,
+                          priceFormatted: formatCurrency(
+                            prop.priceAed,
+                            currency,
+                            locale
+                          ),
+                          url: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/properties/${prop.slug}`,
+                          locale,
+                        })}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-1 h-10 rounded-[6px] bg-[#0F6E4A] text-white text-xs font-semibold"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        WhatsApp
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               </div>
