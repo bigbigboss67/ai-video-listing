@@ -10,7 +10,7 @@ import {
   moderateVideo,
   resetLocalStoreForTests,
 } from '@/lib/store';
-import { getDemoUser } from '@/lib/auth';
+import { getDemoProfile as getDemoUser } from '@/lib/demo-accounts';
 import { realtimeBroker } from '@/lib/realtime-broker';
 import type { RealtimeEvent } from '@/types/domain';
 

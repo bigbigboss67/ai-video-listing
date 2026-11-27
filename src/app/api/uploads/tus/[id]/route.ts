@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import {
+  canModerate,
   canPublishDirectly,
   canUploadVideo,
   getCurrentSessionUser,
 } from '@/lib/auth';
-import { apiError } from '@/lib/api-error';
+import { apiError, unauthenticatedError } from '@/lib/api-error';
+import type { SessionUser } from '@/types/domain';
 import {
   appendTusChunk,
   finalizeVideoProcessing,
@@ -17,13 +19,23 @@ const TUS_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
+// Only the uploader (or a moderator) may inspect or append to an upload session
+function canAccessUpload(user: SessionUser, uploaderId: string): boolean {
+  return user.id === uploaderId || canModerate(user.role);
+}
+
 export async function HEAD(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const user = await getCurrentSessionUser();
+  if (!user) {
+    return new NextResponse(null, { status: 401, headers: TUS_HEADERS });
+  }
   const { id } = await context.params;
   const session = getTusSession(id);
-  if (!session) {
+  if (!session || !canAccessUpload(user, session.uploaderId)) {
+    // 404 rather than 403 so session IDs of other users cannot be probed
     return new NextResponse(null, { status: 404, headers: TUS_HEADERS });
   }
 
@@ -42,11 +54,16 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   const user = await getCurrentSessionUser();
+  if (!user) return unauthenticatedError();
   if (!canUploadVideo(user.role)) {
     return apiError(403, 'FORBIDDEN', 'Unauthorized upload attempt.');
   }
 
   const { id } = await context.params;
+  const existing = getTusSession(id);
+  if (!existing || !canAccessUpload(user, existing.uploaderId)) {
+    return apiError(404, 'UPLOAD_NOT_FOUND', 'Upload session not found.');
+  }
   const offsetHeader = request.headers.get('upload-offset');
   if (offsetHeader === null || Number.isNaN(Number(offsetHeader))) {
     return apiError(400, 'MISSING_OFFSET', 'Upload-Offset header is required.');

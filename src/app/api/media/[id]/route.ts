@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { NextResponse } from 'next/server';
-import { getTusSession } from '@/lib/store';
+import { canModerate, getCurrentSessionUser } from '@/lib/auth';
+import { getTusSession, getVideoById } from '@/lib/store';
 
 export async function GET(
   request: Request,
@@ -23,6 +24,20 @@ export async function GET(
       { status: 404 }
     );
   }
+
+  // Unpublished media (processing, in review, rejected) is visible only to its uploader and moderators
+  const video = getVideoById(session.videoId);
+  const isPublic = video?.uploadStatus === 'ready' && video.moderationStatus === 'approved';
+  if (!isPublic) {
+    const user = await getCurrentSessionUser();
+    if (!user || (user.id !== session.uploaderId && !canModerate(user.role))) {
+      return NextResponse.json(
+        { error: { code: 'MEDIA_NOT_FOUND', message: 'Video file not found', requestId: id } },
+        { status: 404 }
+      );
+    }
+  }
+  const cacheControl = isPublic ? 'public, max-age=300' : 'private, no-store';
 
   const stat = fs.statSync(session.filePath);
   const fileSize = stat.size;
@@ -55,7 +70,7 @@ export async function GET(
           'Content-Type': contentType,
           'Content-Disposition': 'inline',
           'X-Robots-Tag': 'noindex, noai, noimageai',
-          'Cache-Control': 'private, max-age=300',
+          'Cache-Control': isPublic ? 'private, max-age=300' : 'private, no-store',
         },
       });
     }
@@ -68,7 +83,7 @@ export async function GET(
       'Accept-Ranges': 'bytes',
       'Content-Length': String(fileSize),
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': cacheControl,
     },
   });
 }

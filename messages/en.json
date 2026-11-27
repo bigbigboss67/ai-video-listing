@@ -20,8 +20,7 @@
     "manager": "Manager",
     "verified_agent": "Verified Agent",
     "agent": "Standard Agent",
-    "viewer": "Investor / Viewer",
-    "switchRole": "Active Session Role"
+    "viewer": "Investor / Viewer"
   },
   "filters": {
     "title": "Filters",
@@ -185,7 +184,7 @@
     "area": "Area",
     "price": "Price",
     "unitStatus": "Status",
-    "shortcuts": "Keys: F fullscreen · V video · B 3D floor plan · M map · Esc exit"
+    "shortcuts": "Keys: F fullscreen · V video · M map · Esc exit"
   },
   "dashboard": {
     "title": "Operations & Compliance Dashboard",
@@ -205,14 +204,18 @@
     "retry": "Retry Processing",
     "noPending": "Moderation queue is clear. All submitted walkthroughs have been reviewed.",
     "unauthorizedTitle": "Elevated Role Required",
-    "unauthorizedBody": "Switch to Agent, Manager, or Admin role to manage listings and moderation.",
+    "unauthorizedBody": "Your account role cannot manage listings or moderation. You can still export or erase your personal data below.",
     "gdprTitle": "Privacy & Data Subject Rights (UAE PDPL / GDPR)",
     "exportData": "Export My Data (JSON)",
     "deleteAccount": "Erase Personal Data",
-    "deleteConfirm": "Your personal profile and enquiries have been erased and logged in the compliance ledger.",
+    "deleteConfirm": "Your enquiries have been erased and the request was logged in the compliance ledger.",
     "exportCsv": "Export Analytics CSV",
     "avgWatchSec": "Avg Watch",
-    "conversionPct": "Enquiry Conv."
+    "conversionPct": "Enquiry Conv.",
+    "moderatorOnly": "Admin or Manager approval required",
+    "deleteConfirmAction": "Confirm erasure",
+    "cancel": "Cancel",
+    "deleteFailed": "Erasure request failed. Please sign in again and retry."
   },
   "proximity": {
     "onSite": "Filmed On-Site",
@@ -282,5 +285,39 @@
     "publishLiveCta": "Publish & Live-Sync to Portal",
     "quickBarLabel": "Paste any property listing URL to auto-generate a DLD-verified AI video",
     "quickBarCta": "Generate AI Video"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "title": "Sign in to MakanReel",
+    "subtitle": "Agents, managers and admins sign in to upload, moderate and manage listings.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "errorInvalid": "Email or password is incorrect.",
+    "errorRateLimited": "Too many attempts. Please wait a few minutes and try again.",
+    "errorUnavailable": "Sign-in is temporarily unavailable. Please contact the platform administrator.",
+    "errorNetwork": "Network error. Check your connection and try again.",
+    "demoHint": "Local development: demo accounts (tariq@, nadia@, layla@, omar@makanreel.ae and elena.investor@example.com) use the password in DEMO_ACCOUNT_PASSWORD, or makanreel-demo-2026 by default.",
+    "forbiddenTitle": "Agent access required",
+    "forbiddenCaptureBody": "Your account cannot upload listing videos. Ask an admin to grant an agent role."
+  },
+  "team": {
+    "tab": "Team & Access",
+    "fullName": "Full name",
+    "initialPassword": "Initial password (10+ characters)",
+    "role": "Role",
+    "addUser": "Add user",
+    "lastLogin": "Last sign-in",
+    "access": "Access",
+    "you": "you",
+    "enable": "Enable",
+    "disable": "Disable",
+    "emptyTitle": "No user accounts",
+    "emptyBody": "Add the first agent or manager above.",
+    "loadFailed": "Could not load user accounts.",
+    "updateFailed": "Could not update this account.",
+    "createFailed": "Could not create the account."
   }
 }
